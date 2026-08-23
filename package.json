@@ -1,0 +1,33 @@
+{
+  "name": "mosaic-iam",
+  "version": "1.0.0",
+  "description": "IAM Automation for MOSAIC",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "provision": "node src/commands/provision.js",
+    "discover:notion": "node scripts/discover-notion.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Monash-Mosaic/MOSAIC-IAM.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Monash-Mosaic/MOSAIC-IAM/issues"
+  },
+  "homepage": "https://github.com/Monash-Mosaic/MOSAIC-IAM#readme",
+  "dependencies": {
+    "@notionhq/client": "^5.26.0",
+    "@octokit/auth-app": "^8.3.0",
+    "@octokit/rest": "^22.0.1",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
