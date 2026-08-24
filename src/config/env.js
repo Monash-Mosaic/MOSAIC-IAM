@@ -61,10 +61,34 @@ export function getEnv() {
     GITHUB_INSTALLATION_ID: requireEnv("GITHUB_INSTALLATION_ID"),
     GITHUB_PRIVATE_KEY_PATH: privateKeyPath,
     GITHUB_ORG: requireEnv("GITHUB_ORG"),
+    IAM_ENFORCEMENT_MODE: getEnforcementMode(),
     PROJECT_ROOT,
   };
 
   return cachedEnv;
+}
+
+/**
+ * observe | enforce | unset
+ * Unset preserves current reconciliation (grants still run; GitHub revocation
+ * is not implemented). Set observe during legacy import so destructive
+ * revocation cannot run if it is added later.
+ */
+export function getEnforcementMode() {
+  const raw = process.env.IAM_ENFORCEMENT_MODE?.trim().toLowerCase() || "";
+  if (!raw) {
+    return "unset";
+  }
+  if (raw === "observe" || raw === "enforce") {
+    return raw;
+  }
+  throw new Error(
+    `Invalid IAM_ENFORCEMENT_MODE="${process.env.IAM_ENFORCEMENT_MODE}". Use observe or enforce.`,
+  );
+}
+
+export function allowsDestructiveRevocation() {
+  return getEnforcementMode() !== "observe";
 }
 
 function optionalEnv(name) {
@@ -81,6 +105,10 @@ export function getSlackEnv() {
 
 export function getOptionalSlackBotToken() {
   return optionalEnv("SLACK_BOT_TOKEN");
+}
+
+export function getRequiredSlackBotToken() {
+  return requireEnv("SLACK_BOT_TOKEN");
 }
 
 export function getGoogleEnv() {

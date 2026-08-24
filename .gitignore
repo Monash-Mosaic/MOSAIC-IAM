@@ -2,3 +2,5 @@ secrets/
 node_modules/
 .env
 .DS_Store
+migration/github-users.json
+migration/

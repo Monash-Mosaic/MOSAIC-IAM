@@ -131,3 +131,45 @@ npm run provision
 8. Run provision a third time. It should report that the user already matches desired state.
 
 GitHub email invitations require the invited address to be a **verified email** on the recipient's GitHub account.
+
+## Legacy bootstrap / import
+
+Import existing Slack and GitHub access into Notion **before** IAM becomes authoritative. Bootstrap is always non-destructive: it writes Notion only and never invites, grants, removes, or revokes provider access. It does **not** call `reconcileUser()`.
+
+Required Slack bot scopes for bootstrap: `users:read`, `users:read.email`.
+
+Optional env:
+
+```bash
+IAM_ENFORCEMENT_MODE=observe
+```
+
+- `observe` — reconciliation must never perform destructive revocation
+- `enforce` — normal desired-state enforcement
+- unset — preserves current grant behaviour (GitHub revoke remains unimplemented). Prefer `observe` during migration.
+
+Optional GitHub identity file (gitignored): `migration/github-users.json`
+
+```json
+{
+  "github-login": "person@example.com"
+}
+```
+
+Matching order for GitHub logins: public/profile email → IAM `GitHub Username` → migration file → unresolved (manual mapping; no fake IAM user).
+
+Dry-run first (discovery/matching only; no Notion writes):
+
+```bash
+npm run bootstrap:all -- --dry-run
+```
+
+Import into Notion:
+
+```bash
+npm run bootstrap:slack
+npm run bootstrap:github
+npm run bootstrap:all
+```
+
+Imported Access Tracking rows use `Source=Imported`, `Status=Active`, `Action=Existing Access`. Users without Department/Role need manual classification before enforcement.

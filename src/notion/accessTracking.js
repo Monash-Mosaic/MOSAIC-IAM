@@ -37,6 +37,17 @@ const DESIRED_STATE_ALIASES = {
   revoked: ["Revoked"],
 };
 
+const SOURCE_ALIASES = {
+  imported: ["Imported"],
+  provisioned: ["Provisioned"],
+  manual: ["Manual"],
+};
+
+const ACTION_ALIASES = {
+  grant: ["Grant"],
+  "existing access": ["Existing Access", "Grant"],
+};
+
 function mapTracking(page, schema) {
   return {
     pageId: page.id,
@@ -47,6 +58,7 @@ function mapTracking(page, schema) {
     resourceIds: readMappedRelations(page, schema, "resource"),
     provider: readMappedText(page, schema, "provider"),
     action: readMappedText(page, schema, "action"),
+    source: readMappedText(page, schema, "source"),
     status: readMappedText(page, schema, "status"),
     desiredState: readMappedText(page, schema, "desiredState"),
     syncStatus: readMappedText(page, schema, "syncStatus"),
@@ -128,6 +140,8 @@ export async function upsertAccessTracking({
   invitationId,
   githubLogin,
   error,
+  source = "Provisioned",
+  action = "Grant",
   dryRun = false,
 }) {
   const env = getEnv();
@@ -139,12 +153,17 @@ export async function upsertAccessTracking({
 
   const properties = {
     ...buildPropertyWrite(schema, "name", title),
-    ...buildPropertyWrite(schema, "user", user.pageId ? [user.pageId] : []),
+    ...buildPropertyWrite(
+      schema,
+      "user",
+      user.pageId && user.pageId !== "dry-run" ? [user.pageId] : [],
+    ),
     ...buildPropertyWrite(schema, "email", user.email),
     ...buildPropertyWrite(schema, "policy", policy?.pageId ? [policy.pageId] : []),
     ...buildPropertyWrite(schema, "resource", resource.pageId ? [resource.pageId] : []),
     ...buildPropertyWrite(schema, "provider", resource.provider || "GitHub"),
-    ...buildPropertyWrite(schema, "action", "Grant"),
+    ...buildPropertyWrite(schema, "action", action, { optionAliases: ACTION_ALIASES }),
+    ...buildPropertyWrite(schema, "source", source, { optionAliases: SOURCE_ALIASES }),
     ...buildPropertyWrite(schema, "status", status, { optionAliases: ACTUAL_STATE_ALIASES }),
     ...buildPropertyWrite(schema, "desiredState", "granted", {
       optionAliases: DESIRED_STATE_ALIASES,

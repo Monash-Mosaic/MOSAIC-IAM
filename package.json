@@ -12,7 +12,10 @@
     "demo:onboarding": "node src/commands/demoOnboarding.js",
     "google:auth": "node src/commands/googleAuth.js",
     "discover:google-drive": "node src/commands/discoverGoogleDrive.js",
-    "discover:notion": "node scripts/discover-notion.js"
+    "discover:notion": "node scripts/discover-notion.js",
+    "bootstrap:slack": "node src/commands/bootstrap.js slack",
+    "bootstrap:github": "node src/commands/bootstrap.js github",
+    "bootstrap:all": "node src/commands/bootstrap.js all"
   },
   "repository": {
     "type": "git",
@@ -34,6 +37,7 @@
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "wrangler": "^4.125.0"
   }
 }

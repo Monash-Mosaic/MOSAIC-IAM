@@ -59,3 +59,25 @@ export async function findMemberByEmail(email, knownLogin) {
 
   return null;
 }
+
+const profileCache = new Map();
+
+export async function getGitHubUserProfile(login) {
+  const key = String(login ?? "").trim().toLowerCase();
+  if (!key) {
+    return null;
+  }
+  if (profileCache.has(key)) {
+    return profileCache.get(key);
+  }
+  const octokit = await getGitHubClient();
+  try {
+    const { data } = await octokit.rest.users.getByUsername({ username: login });
+    profileCache.set(key, data);
+    return data;
+  } catch (error) {
+    logger.debug("[GITHUB]", `Could not load GitHub profile ${login}: ${error.message}`);
+    profileCache.set(key, null);
+    return null;
+  }
+}

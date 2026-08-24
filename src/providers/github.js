@@ -1,3 +1,4 @@
+import { allowsDestructiveRevocation } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 import {
   cancelOrgInvitation,
@@ -323,6 +324,10 @@ export const githubProvider = {
     return reconcileGitHubAccess({ user, resources, ...context });
   },
   async revoke() {
+    if (!allowsDestructiveRevocation()) {
+      logger.info("[GITHUB]", "Skipping revocation (IAM_ENFORCEMENT_MODE=observe)");
+      return { mutated: false, results: [] };
+    }
     logger.info("[GITHUB]", "Revocation is not implemented in this phase");
     return { mutated: false, results: [] };
   },

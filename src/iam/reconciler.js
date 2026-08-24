@@ -1,3 +1,4 @@
+import { getEnforcementMode } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 import {
   getTrackingRecordsForUser,
@@ -19,6 +20,15 @@ function findPolicyForResource(policies, resource) {
 
 export async function reconcileUser(user, { dryRun = false } = {}) {
   logger.info("[IAM]", `Reconciling ${user.email}`);
+  const enforcementMode = getEnforcementMode();
+  if (enforcementMode === "observe") {
+    logger.info("[IAM]", "Enforcement mode=observe: destructive revocation is disabled");
+  } else if (enforcementMode === "unset") {
+    logger.info(
+      "[IAM]",
+      "IAM_ENFORCEMENT_MODE unset: preserving current grant behaviour (GitHub revoke remains unimplemented)",
+    );
+  }
 
   const { policies, resources: resolvedResources } = await resolveDesiredAccess(user);
   const workspaceResource = await getNotionWorkspaceResource();
@@ -107,6 +117,8 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
       invitationId: result.invitationId ?? null,
       githubLogin: result.githubLogin || githubLogin,
       error: result.error || "",
+      source: "Provisioned",
+      action: "Grant",
       dryRun,
     });
     mutated = mutated || Boolean(result.mutated);

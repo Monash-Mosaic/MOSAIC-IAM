@@ -54,6 +54,16 @@ export async function resolveTeam({ externalResourceId, externalName, code }) {
   );
 }
 
+export async function listTeamMembers({ teamSlug }) {
+  const env = getEnv();
+  const octokit = await getGitHubClient();
+  return octokit.paginate(octokit.rest.teams.listMembersInOrg, {
+    org: env.GITHUB_ORG,
+    team_slug: teamSlug,
+    per_page: 100,
+  });
+}
+
 export async function isTeamMember({ teamSlug, username }) {
   const env = getEnv();
   const octokit = await getGitHubClient();
