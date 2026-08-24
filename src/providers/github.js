@@ -91,8 +91,8 @@ async function ensureTeamMemberships(username, resolvedTeams, dryRun) {
 export async function reconcileGitHubAccess({ user, resources, trackingRecords, dryRun = false }) {
   const githubResources = resources.filter(
     (resource) =>
-      resource.provider.trim().toLowerCase() === "github" &&
-      resource.resourceType.trim().toLowerCase() === "team",
+      String(resource.provider ?? "").trim().toLowerCase() === "github" &&
+      String(resource.resourceType ?? "").trim().toLowerCase() === "team",
   );
 
   if (!githubResources.length) {

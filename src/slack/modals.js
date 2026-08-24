@@ -6,7 +6,7 @@ import {
   selectOptions,
 } from "./config.js";
 
-export function buildOnboardingModal({ slackUserId, prefill = {} } = {}) {
+export function buildOnboardingModal({ slackUserId, prefill = {}, options = { departments: [], roles: [] } } = {}) {
   return {
     type: "modal",
     callback_id: SLACK_VIEW_CALLBACK_ID,
@@ -42,7 +42,7 @@ export function buildOnboardingModal({ slackUserId, prefill = {} } = {}) {
           type: "static_select",
           action_id: SLACK_ELEMENT_IDS.department,
           placeholder: { type: "plain_text", text: "Select a department" },
-          options: selectOptions("departments"),
+          options: selectOptions(options.departments),
         },
       },
       {
@@ -53,7 +53,7 @@ export function buildOnboardingModal({ slackUserId, prefill = {} } = {}) {
           type: "static_select",
           action_id: SLACK_ELEMENT_IDS.role,
           placeholder: { type: "plain_text", text: "Select a role" },
-          options: selectOptions("roles"),
+          options: selectOptions(options.roles),
         },
       },
     ],

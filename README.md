@@ -12,12 +12,14 @@ IAM automation for MOSAIC. Notion is the source of truth. GitHub organisation ac
 
 **Slack app settings**
 
-- Bot token scopes: `chat:write`, `im:write`, `users:read`, `users:read.email` (optional)
+- Bot token scopes: `chat:write`, `im:write`, `users:read`, `users:read.email` (optional), `channels:read`, `groups:read`, `channels:write.invites`, `groups:write.invites`
 - App token (`xapp-`) scope: `connections:write`
 - Subscribe to bot event: `team_join`
 - Interactivity: enabled (Socket Mode delivers actions; no public webhook)
 - Interactivity action ID: `iam_start_onboarding`
 - Modal callback ID: `iam_onboarding_submit`
+
+Department and Role dropdowns are loaded from the **IAM - Users** Notion select/status property options (not hardcoded, not inferred from existing rows). Options are cached in memory for 5 minutes.
 
 Inspect live Notion schemas without printing secrets:
 
@@ -46,10 +48,39 @@ How to test the Slack flow:
 1. Start the bot with `npm run slack`.
 2. Add or invite a real Slack user to the workspace (bots are ignored), or send a test DM with `npm run slack:test-dm -- --user U0123456789`.
 3. The bot DMs a welcome message with **Start Onboarding**.
-4. Complete the modal (Full Name, Email, Department, Role). Email is the identity used for provisioning; GitHub username is not collected.
+4. Complete the modal (Full Name, Email, Department, Role). Department/Role come from Notion. Email is the identity used for provisioning; GitHub username is not collected.
 5. Confirm the **IAM - Users** record (Status `Active`, Slack User ID set).
-6. Confirm the GitHub organisation invitation for that email.
-7. Confirm **IAM - Access Tracking**.
+6. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**.
+7. Use the Notion invite buttons in the result DM (`Join Notion Workspace` plus any policy teamspace buttons). Those rows stay **Awaiting User Action** until later verification.
+
+## Google Drive OAuth (optional)
+
+Google credentials are optional. If they are missing, Google Drive resources are marked **Not Configured** and other providers still run.
+
+1. Create a Google Cloud OAuth client (Desktop or Web) with Drive scope `https://www.googleapis.com/auth/drive`.
+2. Add redirect URI `http://127.0.0.1:53682/oauth2/callback` (or `GOOGLE_REDIRECT_URI`).
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+4. Run:
+
+```bash
+npm run google:auth
+```
+
+5. Copy the printed refresh token into `.env` as `GOOGLE_REFRESH_TOKEN`. The command does not write secrets to disk.
+6. Discover Drive IDs:
+
+```bash
+npm run discover:google-drive
+```
+
+Map those IDs into **IAM - Access Resources** (`Provider: GoogleDrive`, `Resource Type: Folder` or `SharedDrive`, `External Resource ID`, `Permission: Viewer|Commenter|Contributor|Content Manager|Manager`).
+
+## Notion invite links
+
+Notion Plus has no SCIM in this engine. Workspace membership is a user-action invite:
+
+- Set `NOTION_WORKSPACE_INVITE_URL` for every onboarded user (`NT-WORKSPACE`).
+- Teamspace invite URLs belong on **IAM - Access Resources** (`Invite URL`), for example `NT-EN`. Slack buttons are generated from resolved RBAC resources, not hardcoded department maps.
 
 ## Demo onboarding (no Slack)
 
@@ -63,7 +94,7 @@ npm run demo:onboarding -- \
   --role Developer
 ```
 
-Dry-run (no Notion or GitHub writes):
+Dry-run (no Notion, GitHub, Slack, or Google Drive writes):
 
 ```bash
 npm run demo:onboarding -- \

@@ -1,5 +1,7 @@
 import { logger } from "../utils/logger.js";
 import { validateOnboardingInput, onboardingService } from "../iam/onboarding.js";
+import { getUserSelectOptions } from "../notion/userOptions.js";
+import { buildOnboardingResultBlocks } from "../iam/accessSummary.js";
 import { SLACK_BLOCK_IDS } from "./config.js";
 import { buildOnboardingModal, buildWelcomeBlocks, parseOnboardingModal } from "./modals.js";
 
@@ -26,14 +28,26 @@ export async function sendWelcomeDm(client, user) {
 
 export async function openOnboardingModal(client, body) {
   const slackUserId = body.user?.id;
-  await client.views.open({
-    trigger_id: body.trigger_id,
-    view: buildOnboardingModal({ slackUserId }),
-  });
+  try {
+    const options = await getUserSelectOptions();
+    if (!options.departments.length || !options.roles.length) {
+      throw new Error("Department or Role options are not configured in Notion");
+    }
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: buildOnboardingModal({ slackUserId, options }),
+    });
+  } catch (error) {
+    logger.error("[SLACK]", `Could not load onboarding options: ${error.message}`);
+    await client.chat.postMessage({
+      channel: slackUserId,
+      text: "Onboarding is temporarily unavailable. Please contact an administrator.",
+    });
+  }
 }
 
-export function modalValidationErrors(parsed) {
-  const errors = validateOnboardingInput(parsed);
+export async function modalValidationErrors(parsed) {
+  const errors = await validateOnboardingInput(parsed);
   if (!Object.keys(errors).length) {
     return null;
   }
@@ -69,6 +83,7 @@ export async function completeOnboarding(client, slackUserId, input) {
   await client.chat.postMessage({
     channel: slackUserId,
     text: result.message,
+    blocks: result.outcome === "failed" ? undefined : buildOnboardingResultBlocks(result),
   });
   logger.info("[SLACK]", `Onboarding ${result.outcome} for Slack user ${slackUserId}`);
   return result;

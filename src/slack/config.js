@@ -1,7 +1,3 @@
-import { ONBOARDING_OPTIONS } from "../config/onboarding.js";
-
-export { ONBOARDING_OPTIONS, findOnboardingOption, listOnboardingLabels } from "../config/onboarding.js";
-
 export const SLACK_ACTION_IDS = {
   startOnboarding: "iam_start_onboarding",
 };
@@ -22,8 +18,8 @@ export const SLACK_ELEMENT_IDS = {
 
 export const SLACK_VIEW_CALLBACK_ID = "iam_onboarding_submit";
 
-export function selectOptions(kind) {
-  return (ONBOARDING_OPTIONS[kind] ?? []).map((option) => ({
+export function selectOptions(options = []) {
+  return options.map((option) => ({
     text: { type: "plain_text", text: option.label },
     value: option.value,
   }));

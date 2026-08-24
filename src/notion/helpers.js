@@ -78,11 +78,11 @@ export function getCheckbox(property) {
   if (property.type === "checkbox") {
     return Boolean(property.checkbox);
   }
-  const select = getSelect(property).toLowerCase();
+  const select = String(getSelect(property) ?? "").toLowerCase();
   if (["yes", "true", "enabled", "active"].includes(select)) {
     return true;
   }
-  const text = (getRichText(property) || getTitle(property)).toLowerCase();
+  const text = String(getRichText(property) || getTitle(property) || "").toLowerCase();
   return ["yes", "true", "enabled"].includes(text);
 }
 
@@ -224,21 +224,25 @@ export function pickClosestOption(desired, options = [], aliases = {}) {
     return desired;
   }
   const normalizedDesired = String(desired).trim().toLowerCase();
-  const exact = options.find((option) => option.toLowerCase() === normalizedDesired);
+  const exact = options.find((option) => String(option ?? "").toLowerCase() === normalizedDesired);
   if (exact) {
     return exact;
   }
   const aliasTargets = aliases[normalizedDesired] ?? [];
   for (const alias of aliasTargets) {
-    const match = options.find((option) => option.toLowerCase() === alias.toLowerCase());
+    const match = options.find((option) => String(option ?? "").toLowerCase() === alias.toLowerCase());
     if (match) {
       return match;
     }
   }
   const includes = options.find(
-    (option) =>
-      option.toLowerCase().includes(normalizedDesired) ||
-      normalizedDesired.includes(option.toLowerCase()),
+    (option) => {
+      const normalizedOption = String(option ?? "").toLowerCase();
+      return (
+        normalizedOption.includes(normalizedDesired) ||
+        normalizedDesired.includes(normalizedOption)
+      );
+    },
   );
   return includes ?? null;
 }

@@ -19,7 +19,7 @@ export function registerActions(app) {
 
   app.view(SLACK_VIEW_CALLBACK_ID, async ({ ack, body, view, client }) => {
     const parsed = extractOnboardingSubmission(view, body.user?.id);
-    const errors = modalValidationErrors(parsed);
+    const errors = await modalValidationErrors(parsed);
     if (errors) {
       await ack({ response_action: "errors", errors });
       return;

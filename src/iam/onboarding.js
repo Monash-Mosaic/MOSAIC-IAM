@@ -1,11 +1,12 @@
 import { logger } from "../utils/logger.js";
 import { upsertIamUser } from "../notion/users.js";
+import { findSelectOption, getUserSelectOptions, listSelectLabels } from "../notion/userOptions.js";
 import { reconcileUser } from "./reconciler.js";
-import { findOnboardingOption, listOnboardingLabels } from "../config/onboarding.js";
+import { buildOnboardingResultText } from "./accessSummary.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateOnboardingInput({ name, email, department, role }) {
+export async function validateOnboardingInput({ name, email, department, role }) {
   const errors = {};
   if (!String(name ?? "").trim()) {
     errors.name = "Full name is required.";
@@ -14,28 +15,35 @@ export function validateOnboardingInput({ name, email, department, role }) {
   if (!normalizedEmail || !EMAIL_PATTERN.test(normalizedEmail)) {
     errors.email = "Enter a valid email address.";
   }
-  if (!findOnboardingOption("departments", department)) {
-    errors.department = `Department must be one of: ${listOnboardingLabels("departments")}.`;
+
+  const options = await getUserSelectOptions();
+  if (!options.departments.length) {
+    errors.department = "Department options are not configured in Notion.";
+  } else if (!findSelectOption(options.departments, department)) {
+    errors.department = `Department must be one of: ${listSelectLabels(options.departments)}.`;
   }
-  if (!findOnboardingOption("roles", role)) {
-    errors.role = `Role must be one of: ${listOnboardingLabels("roles")}.`;
+  if (!options.roles.length) {
+    errors.role = "Role options are not configured in Notion.";
+  } else if (!findSelectOption(options.roles, role)) {
+    errors.role = `Role must be one of: ${listSelectLabels(options.roles)}.`;
   }
   return errors;
 }
 
-export function normalizeOnboardingInput({ name, email, department, role, slackUserId }) {
-  const errors = validateOnboardingInput({ name, email, department, role });
+export async function normalizeOnboardingInput({ name, email, department, role, slackUserId }) {
+  const errors = await validateOnboardingInput({ name, email, department, role });
   if (Object.keys(errors).length) {
     const error = new Error(Object.values(errors).join(" "));
     error.validationErrors = errors;
     throw error;
   }
 
+  const options = await getUserSelectOptions();
   return {
     name: String(name).trim(),
     email: String(email).trim().toLowerCase(),
-    department: findOnboardingOption("departments", department).value,
-    role: findOnboardingOption("roles", role).value,
+    department: findSelectOption(options.departments, department).value,
+    role: findSelectOption(options.roles, role).value,
     slackUserId: slackUserId ? String(slackUserId).trim() : "",
   };
 }
@@ -54,36 +62,30 @@ function classifyOutcome(reconcileResult) {
   ) {
     return "already_complete";
   }
-  if (reconcileResult.provisioningStatus === "partially provisioned") {
-    return "failed";
-  }
   return "pending";
 }
 
 export function buildOnboardingUserMessage(result) {
-  if (result.outcome === "already_complete") {
-    return "Your onboarding is already complete and your required access is active.";
-  }
-  if (result.outcome === "failed" && result.saved) {
-    return [
-      "Your onboarding was saved, but access provisioning failed.",
-      "Please contact an administrator.",
-    ].join("\n");
-  }
-  if (result.outcome === "failed") {
-    return "Onboarding could not be saved. Please contact an administrator.";
-  }
-  return [
-    "Onboarding submitted successfully.",
-    `Department: ${result.user.department}`,
-    `Role: ${result.user.role}`,
-    "Your access request is being provisioned.",
-    "Check your email for the GitHub organisation invitation.",
-  ].join("\n");
+  return buildOnboardingResultText(result);
 }
 
 export async function onboardingService(input, { dryRun = false } = {}) {
-  const parsed = normalizeOnboardingInput(input);
+  let parsed;
+  try {
+    parsed = await normalizeOnboardingInput(input);
+  } catch (error) {
+    if (error.validationErrors) {
+      throw error;
+    }
+    logger.error("[ERROR]", `Failed to validate onboarding input: ${error.message}`);
+    return {
+      outcome: "failed",
+      saved: false,
+      user: { ...input },
+      reconcileResult: null,
+      message: "Onboarding could not be saved. Please contact an administrator.",
+    };
+  }
 
   let user;
   try {

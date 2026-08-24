@@ -11,10 +11,13 @@ import {
 
 const ACTUAL_STATE_ALIASES = {
   pending: ["Pending"],
-  active: ["Granted"],
-  granted: ["Granted"],
-  failed: ["Unknown", "Pending"],
+  active: ["Granted", "Active"],
+  granted: ["Granted", "Active"],
+  failed: ["Unknown", "Pending", "Failed"],
   revoked: ["Revoked"],
+  awaiting_user_action: ["Awaiting User Action", "Pending"],
+  not_configured: ["Not Configured", "Unknown"],
+  needs_configuration: ["Needs Configuration", "Not Configured", "Unknown"],
 };
 
 const SYNC_STATUS_ALIASES = {
@@ -24,6 +27,9 @@ const SYNC_STATUS_ALIASES = {
   completed: ["Synced"],
   failed: ["Failed"],
   revoked: ["Synced"],
+  awaiting_user_action: ["Pending"],
+  not_configured: ["Pending"],
+  needs_configuration: ["Pending"],
 };
 
 const DESIRED_STATE_ALIASES = {
@@ -79,19 +85,27 @@ export function clearTrackingCache() {
   trackingCache = null;
 }
 
+function recordName(record) {
+  return String(record?.name ?? "");
+}
+
+function recordCodeHint(record) {
+  return String(record?.resourceCodeHint ?? "");
+}
+
 export async function getTrackingRecordsForUser(userOrEmail) {
   const records = await getAllTrackingRecords();
   if (typeof userOrEmail === "string") {
     const email = userOrEmail.trim().toLowerCase();
     return records.filter(
-      (record) => record.email === email || record.name.toLowerCase().includes(email),
+      (record) => record.email === email || recordName(record).toLowerCase().includes(email),
     );
   }
   const email = userOrEmail.email?.trim().toLowerCase() ?? "";
   return records.filter(
     (record) =>
-      record.userIds.includes(userOrEmail.pageId) ||
-      (email && (record.email === email || record.name.toLowerCase().includes(email))),
+      record.userIds?.includes(userOrEmail.pageId) ||
+      (email && (record.email === email || recordName(record).toLowerCase().includes(email))),
   );
 }
 
@@ -99,9 +113,9 @@ export async function findTrackingRecord(user, resourceCode, resourcePageId) {
   const records = await getTrackingRecordsForUser(user);
   const code = String(resourceCode ?? "").trim().toLowerCase();
   return (
-    records.find((record) => resourcePageId && record.resourceIds.includes(resourcePageId)) ??
-    records.find((record) => record.resourceCodeHint.toLowerCase() === code) ??
-    records.find((record) => record.name.toLowerCase().includes(code)) ??
+    records.find((record) => resourcePageId && record.resourceIds?.includes(resourcePageId)) ??
+    records.find((record) => recordCodeHint(record).toLowerCase() === code) ??
+    records.find((record) => recordName(record).toLowerCase().includes(code)) ??
     null
   );
 }
@@ -125,10 +139,10 @@ export async function upsertAccessTracking({
 
   const properties = {
     ...buildPropertyWrite(schema, "name", title),
-    ...buildPropertyWrite(schema, "user", [user.pageId]),
+    ...buildPropertyWrite(schema, "user", user.pageId ? [user.pageId] : []),
     ...buildPropertyWrite(schema, "email", user.email),
-    ...buildPropertyWrite(schema, "policy", policy ? [policy.pageId] : []),
-    ...buildPropertyWrite(schema, "resource", [resource.pageId]),
+    ...buildPropertyWrite(schema, "policy", policy?.pageId ? [policy.pageId] : []),
+    ...buildPropertyWrite(schema, "resource", resource.pageId ? [resource.pageId] : []),
     ...buildPropertyWrite(schema, "provider", resource.provider || "GitHub"),
     ...buildPropertyWrite(schema, "action", "Grant"),
     ...buildPropertyWrite(schema, "status", status, { optionAliases: ACTUAL_STATE_ALIASES }),
@@ -189,13 +203,14 @@ export async function upsertAccessTracking({
   logger.info("[TRACKING]", `${resource.code} -> ${status}`);
   const mapped = {
     pageId: created.id,
+    name: title,
     email: user.email,
     status,
     invitationId: invitationId ?? null,
     githubLogin: githubLogin || null,
-    userIds: [user.pageId],
-    resourceIds: [resource.pageId],
-    resourceCodeHint: resource.code,
+    userIds: [user.pageId].filter(Boolean),
+    resourceIds: [resource.pageId].filter(Boolean),
+    resourceCodeHint: resource.code || "",
     error: error || "",
   };
   (await getAllTrackingRecords()).push(mapped);

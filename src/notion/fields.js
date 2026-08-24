@@ -12,6 +12,7 @@ import {
   getRichText,
   getSelect,
   getTitle,
+  getUrl,
   notionCheckbox,
   notionDate,
   notionEmail,
@@ -53,11 +54,12 @@ export const NOTION_FIELDS = {
     provider: ["Service", "Provider"],
     resourceType: ["Resource Type", "Type"],
     externalName: ["Resource Name", "External Name", "Team Name"],
-    externalResourceId: ["External Resource ID", "External Resource Id", "Team ID", "GitHub Team ID"],
+    externalResourceId: ["External Resource ID", "External Resource Id", "Team ID", "GitHub Team ID", "Slack Channel ID", "Drive ID"],
     permission: ["Access Level", "Permission"],
     provisionEnabled: ["Managed By IAM", "Provision Enabled", "Provision"],
     revokeEnabled: ["Revoke Enabled", "Revoke"],
     enabled: ["Enabled", "Active"],
+    inviteUrl: ["Invite URL", "Invite Url", "Invitation URL", "Invite Link"],
   },
   accessTracking: {
     name: ["Tracking ID", "Name"],
@@ -193,7 +195,10 @@ export function readMappedText(page, schema, fieldKey) {
     const value = getNumber(property);
     return value == null ? "" : String(value);
   }
-  return getRichText(property) || getTitle(property) || getSelect(property);
+  if (property.type === "url") {
+    return getUrl(property);
+  }
+  return getRichText(property) || getTitle(property) || getSelect(property) || getUrl(property);
 }
 
 export function readMappedNumber(page, schema, fieldKey) {

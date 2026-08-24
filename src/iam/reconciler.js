@@ -5,6 +5,7 @@ import {
 } from "../notion/accessTracking.js";
 import { updateUserProvisioningStatus } from "../notion/users.js";
 import { getProvider } from "../providers/index.js";
+import { getNotionWorkspaceResource } from "../providers/notion.js";
 import { groupResourcesByProvider, resolveDesiredAccess } from "./resolver.js";
 import { deriveProvisioningStatus } from "./status.js";
 
@@ -19,7 +20,13 @@ function findPolicyForResource(policies, resource) {
 export async function reconcileUser(user, { dryRun = false } = {}) {
   logger.info("[IAM]", `Reconciling ${user.email}`);
 
-  const { policies, resources } = await resolveDesiredAccess(user);
+  const { policies, resources: resolvedResources } = await resolveDesiredAccess(user);
+  const workspaceResource = await getNotionWorkspaceResource();
+  const resources = resolvedResources.some(
+    (resource) => resource.code.trim().toUpperCase() === workspaceResource.code.trim().toUpperCase(),
+  )
+    ? resolvedResources
+    : [...resolvedResources, workspaceResource];
   const trackingRecords = await getTrackingRecordsForUser(user);
   const now = new Date().toISOString();
 
@@ -62,10 +69,25 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
       continue;
     }
 
-    const outcome = await provider.reconcile(user, providerResources, {
-      trackingRecords,
-      dryRun,
-    });
+    let outcome;
+    try {
+      outcome = await provider.reconcile(user, providerResources, {
+        trackingRecords,
+        dryRun,
+      });
+    } catch (error) {
+      logger.error("[IAM]", `Provider ${providerName} failed for ${user.email}: ${error.message}`);
+      outcome = {
+        invitationCreated: false,
+        mutated: false,
+        results: providerResources.map((resource) => ({
+          resource,
+          status: "failed",
+          error: "Access could not be updated.",
+          mutated: false,
+        })),
+      };
+    }
     invitationCreated = invitationCreated || Boolean(outcome.invitationCreated);
     mutated = mutated || Boolean(outcome.mutated);
     githubLogin = outcome.githubLogin || githubLogin;

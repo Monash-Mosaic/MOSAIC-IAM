@@ -67,12 +67,38 @@ export function getEnv() {
   return cachedEnv;
 }
 
+function optionalEnv(name) {
+  return process.env[name]?.trim() || "";
+}
+
 export function getSlackEnv() {
   return {
     SLACK_BOT_TOKEN: requireEnv("SLACK_BOT_TOKEN"),
     SLACK_APP_TOKEN: requireEnv("SLACK_APP_TOKEN"),
     SLACK_SIGNING_SECRET: requireEnv("SLACK_SIGNING_SECRET"),
   };
+}
+
+export function getOptionalSlackBotToken() {
+  return optionalEnv("SLACK_BOT_TOKEN");
+}
+
+export function getGoogleEnv() {
+  return {
+    clientId: optionalEnv("GOOGLE_CLIENT_ID"),
+    clientSecret: optionalEnv("GOOGLE_CLIENT_SECRET"),
+    refreshToken: optionalEnv("GOOGLE_REFRESH_TOKEN"),
+    redirectUri: optionalEnv("GOOGLE_REDIRECT_URI") || "http://127.0.0.1:53682/oauth2/callback",
+  };
+}
+
+export function isGoogleConfigured() {
+  const google = getGoogleEnv();
+  return Boolean(google.clientId && google.clientSecret && google.refreshToken);
+}
+
+export function getNotionWorkspaceInviteUrl() {
+  return optionalEnv("NOTION_WORKSPACE_INVITE_URL");
 }
 
 export function getGitHubPrivateKey() {

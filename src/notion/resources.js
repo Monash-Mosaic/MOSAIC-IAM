@@ -9,12 +9,13 @@ import {
   warnIfFieldMissing,
 } from "./fields.js";
 
-function parseNumericId(value) {
-  if (value == null || value === "") {
-    return null;
+function readExternalId(page, schema) {
+  const text = readMappedText(page, schema, "externalResourceId").trim();
+  if (text) {
+    return text;
   }
-  const match = String(value).match(/\d+/);
-  return match ? Number(match[0]) : null;
+  const numeric = readMappedNumber(page, schema, "externalResourceId");
+  return numeric == null ? "" : String(numeric);
 }
 
 function mapResource(page, schema) {
@@ -23,10 +24,6 @@ function mapResource(page, schema) {
     ? readMappedCheckbox(page, schema, "provisionEnabled")
     : true;
   const provisionEnabled = enabled && managedByIam;
-
-  const externalResourceId =
-    readMappedNumber(page, schema, "externalResourceId") ??
-    parseNumericId(readMappedText(page, schema, "externalResourceId"));
 
   const titleName = readMappedText(page, schema, "name");
   const resourceName = readMappedText(page, schema, "externalName");
@@ -38,12 +35,13 @@ function mapResource(page, schema) {
     provider: readMappedText(page, schema, "provider"),
     resourceType: readMappedText(page, schema, "resourceType"),
     externalName: resourceName || titleName,
-    externalResourceId,
+    externalResourceId: readExternalId(page, schema),
     permission: readMappedText(page, schema, "permission"),
     provisionEnabled,
     revokeEnabled: schema.fields.revokeEnabled
       ? readMappedCheckbox(page, schema, "revokeEnabled")
       : true,
+    inviteUrl: readMappedText(page, schema, "inviteUrl").trim(),
   };
 }
 

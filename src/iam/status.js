@@ -1,3 +1,7 @@
+const SUCCESS_STATUSES = new Set(["active", "granted"]);
+const IN_FLIGHT_STATUSES = new Set(["pending", "awaiting_user_action"]);
+const SOFT_STATUSES = new Set(["not_configured", "needs_configuration"]);
+
 export function deriveProvisioningStatus(results) {
   if (!results.length) {
     return "failed";
@@ -12,24 +16,22 @@ export function deriveProvisioningStatus(results) {
   }
 
   const failed = statuses.some((status) => status === "failed");
-  const pending = statuses.some((status) => status === "pending");
-  const active = statuses.every((status) => status === "active");
-  const anyActive = statuses.some((status) => status === "active");
+  const success = statuses.some((status) => SUCCESS_STATUSES.has(status));
+  const inFlight = statuses.some((status) => IN_FLIGHT_STATUSES.has(status));
+  const soft = statuses.some((status) => SOFT_STATUSES.has(status));
+  const allSuccess = statuses.every((status) => SUCCESS_STATUSES.has(status));
 
-  if (failed && !anyActive && !pending) {
+  if (failed && !success && !inFlight && !soft) {
     return "failed";
   }
-  if (failed) {
+  if (failed || (success && (inFlight || soft)) || (inFlight && soft && success)) {
     return "partially provisioned";
   }
-  if (active) {
+  if (allSuccess) {
     return "completed";
   }
-  if (pending && anyActive) {
+  if (success && (inFlight || soft)) {
     return "partially provisioned";
-  }
-  if (pending) {
-    return "pending";
   }
   return "pending";
 }

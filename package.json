@@ -10,6 +10,8 @@
     "slack": "node src/commands/slack.js",
     "slack:test-dm": "node src/commands/slackTestDm.js",
     "demo:onboarding": "node src/commands/demoOnboarding.js",
+    "google:auth": "node src/commands/googleAuth.js",
+    "discover:google-drive": "node src/commands/discoverGoogleDrive.js",
     "discover:notion": "node scripts/discover-notion.js"
   },
   "repository": {
