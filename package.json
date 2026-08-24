@@ -7,6 +7,9 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "provision": "node src/commands/provision.js",
+    "slack": "node src/commands/slack.js",
+    "slack:test-dm": "node src/commands/slackTestDm.js",
+    "demo:onboarding": "node src/commands/demoOnboarding.js",
     "discover:notion": "node scripts/discover-notion.js"
   },
   "repository": {
@@ -25,6 +28,7 @@
     "@notionhq/client": "^5.26.0",
     "@octokit/auth-app": "^8.3.0",
     "@octokit/rest": "^22.0.1",
+    "@slack/bolt": "^4.6.0",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {

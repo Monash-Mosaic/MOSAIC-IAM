@@ -67,6 +67,14 @@ export function getEnv() {
   return cachedEnv;
 }
 
+export function getSlackEnv() {
+  return {
+    SLACK_BOT_TOKEN: requireEnv("SLACK_BOT_TOKEN"),
+    SLACK_APP_TOKEN: requireEnv("SLACK_APP_TOKEN"),
+    SLACK_SIGNING_SECRET: requireEnv("SLACK_SIGNING_SECRET"),
+  };
+}
+
 export function getGitHubPrivateKey() {
   const env = getEnv();
   return readFileSync(env.GITHUB_PRIVATE_KEY_PATH, "utf8");

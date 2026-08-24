@@ -40,7 +40,11 @@ function isProcessableUser(user) {
   return PROCESSABLE_STATUSES.has(user.status.trim().toLowerCase());
 }
 
-export async function getActiveUsers() {
+const USER_STATUS_ALIASES = {
+  active: ["Active"],
+};
+
+export async function getAllUsers() {
   const env = getEnv();
   const schema = await getDataSourceSchema("users");
   warnIfFieldMissing(schema, "email", true);
@@ -49,16 +53,102 @@ export async function getActiveUsers() {
   warnIfFieldMissing(schema, "role");
 
   const pages = await queryDataSource(env.NOTION_USERS_DATA_SOURCE_ID);
-  const users = pages.map((page) => mapUser(page, schema)).filter((user) => user.email);
+  return pages.map((page) => mapUser(page, schema)).filter((user) => user.email);
+}
+
+export async function getActiveUsers() {
+  const users = await getAllUsers();
   const active = users.filter(isProcessableUser);
   logger.info("[NOTION]", `Loaded ${active.length} processable member(s)`);
   return active;
+}
+
+export async function findUserByEmail(email) {
+  const users = await getAllUsers();
+  const normalized = email.trim().toLowerCase();
+  return users.find((user) => user.email === normalized) ?? null;
 }
 
 export async function getUserByEmail(email) {
   const users = await getActiveUsers();
   const normalized = email.trim().toLowerCase();
   return users.find((user) => user.email === normalized) ?? null;
+}
+
+export async function upsertIamUser({
+  name,
+  email,
+  department,
+  role,
+  slackUserId = "",
+  dryRun = false,
+}) {
+  const env = getEnv();
+  const schema = await getDataSourceSchema("users");
+  warnIfFieldMissing(schema, "email", true);
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await findUserByEmail(normalizedEmail);
+  const properties = {
+    ...buildPropertyWrite(schema, "name", name),
+    ...buildPropertyWrite(schema, "email", normalizedEmail),
+    ...buildPropertyWrite(schema, "department", department),
+    ...buildPropertyWrite(schema, "role", role),
+    ...buildPropertyWrite(schema, "status", "Active", { optionAliases: USER_STATUS_ALIASES }),
+    ...buildPropertyWrite(schema, "provisioningStatus", "Pending", {
+      optionAliases: IAM_STATUS_ALIASES,
+    }),
+    ...buildPropertyWrite(schema, "slackUserId", slackUserId || ""),
+  };
+
+  if (schema.titleProperty && !schema.fields.name) {
+    Object.assign(properties, {
+      [schema.titleProperty]: { title: [{ type: "text", text: { content: name } }] },
+    });
+  }
+
+  const mapped = {
+    pageId: existing?.pageId ?? null,
+    name,
+    email: normalizedEmail,
+    department,
+    role,
+    status: "Active",
+    provisioningStatus: "Pending",
+    slackUserId: slackUserId || existing?.slackUserId || "",
+    lastReconciled: existing?.lastReconciled ?? null,
+    error: "",
+    policyIds: existing?.policyIds ?? [],
+  };
+
+  if (dryRun) {
+    logger.info(
+      "[NOTION]",
+      `DRY RUN would ${existing ? "update" : "create"} IAM user ${normalizedEmail}`,
+    );
+    return {
+      ...mapped,
+      pageId: existing?.pageId ?? "dry-run",
+      created: !existing,
+    };
+  }
+
+  const notion = getNotionClient();
+  if (existing) {
+    await notion.pages.update({
+      page_id: existing.pageId,
+      properties,
+    });
+    logger.info("[NOTION]", `Updated IAM user ${normalizedEmail}`);
+    return { ...mapped, pageId: existing.pageId, created: false };
+  }
+
+  const created = await notion.pages.create({
+    parent: { data_source_id: env.NOTION_USERS_DATA_SOURCE_ID },
+    properties,
+  });
+  logger.info("[NOTION]", `Created IAM user ${normalizedEmail}`);
+  return { ...mapped, pageId: created.id, created: true };
 }
 
 export async function updateUserProvisioningStatus(
