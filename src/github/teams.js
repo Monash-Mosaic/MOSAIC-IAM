@@ -11,7 +11,7 @@ export async function listOrgTeams() {
   const env = getEnv();
   const octokit = await getGitHubClient();
   teamCache = await octokit.paginate(octokit.rest.teams.list, {
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     per_page: 100,
   });
   return teamCache;
@@ -58,7 +58,7 @@ export async function listTeamMembers({ teamSlug }) {
   const env = getEnv();
   const octokit = await getGitHubClient();
   return octokit.paginate(octokit.rest.teams.listMembersInOrg, {
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     team_slug: teamSlug,
     per_page: 100,
   });
@@ -69,7 +69,7 @@ export async function isTeamMember({ teamSlug, username }) {
   const octokit = await getGitHubClient();
   try {
     const { data } = await octokit.rest.teams.getMembershipForUserInOrg({
-      org: env.GITHUB_ORG,
+      org: env.GH_ORG,
       team_slug: teamSlug,
       username,
     });
@@ -86,7 +86,7 @@ export async function addTeamMember({ teamSlug, username }) {
   const env = getEnv();
   const octokit = await getGitHubClient();
   const { data } = await octokit.rest.teams.addOrUpdateMembershipForUserInOrg({
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     team_slug: teamSlug,
     username,
     role: "member",

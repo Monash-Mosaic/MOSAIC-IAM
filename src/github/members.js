@@ -6,7 +6,7 @@ export async function listOrgMembers() {
   const env = getEnv();
   const octokit = await getGitHubClient();
   return octokit.paginate(octokit.rest.orgs.listMembers, {
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     per_page: 100,
   });
 }
@@ -16,7 +16,7 @@ export async function getOrgMembership(username) {
   const octokit = await getGitHubClient();
   try {
     const { data } = await octokit.rest.orgs.getMembershipForUser({
-      org: env.GITHUB_ORG,
+      org: env.GH_ORG,
       username,
     });
     return data;

@@ -6,7 +6,7 @@ export async function listPendingInvitations() {
   const env = getEnv();
   const octokit = await getGitHubClient();
   return octokit.paginate(octokit.rest.orgs.listPendingInvitations, {
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     per_page: 100,
   });
 }
@@ -23,7 +23,7 @@ export async function getInvitationTeams(invitationId) {
   const env = getEnv();
   const octokit = await getGitHubClient();
   return octokit.paginate(octokit.rest.orgs.listInvitationTeams, {
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     invitation_id: invitationId,
     per_page: 100,
   });
@@ -38,7 +38,7 @@ export async function createOrgInvitation({ email, teamIds }) {
     `Creating organisation invitation for ${email} with team IDs: ${uniqueTeamIds.join(", ") || "(none)"}`,
   );
   const { data } = await octokit.rest.orgs.createInvitation({
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     email,
     role: "direct_member",
     team_ids: uniqueTeamIds,
@@ -51,7 +51,7 @@ export async function cancelOrgInvitation(invitationId) {
   const octokit = await getGitHubClient();
   logger.warn("[GITHUB]", `Cancelling pending organisation invitation ${invitationId}`);
   await octokit.rest.orgs.cancelInvitation({
-    org: env.GITHUB_ORG,
+    org: env.GH_ORG,
     invitation_id: invitationId,
   });
 }

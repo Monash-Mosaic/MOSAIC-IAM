@@ -1,0 +1,94 @@
+name: Deploy Worker
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run checks
+        run: npm run test --if-present
+
+      - name: Write Worker secrets file
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_USERS_DATA_SOURCE_ID: ${{ secrets.NOTION_USERS_DATA_SOURCE_ID || vars.NOTION_USERS_DATA_SOURCE_ID }}
+          NOTION_POLICIES_DATA_SOURCE_ID: ${{ secrets.NOTION_POLICIES_DATA_SOURCE_ID || vars.NOTION_POLICIES_DATA_SOURCE_ID }}
+          NOTION_RESOURCES_DATA_SOURCE_ID: ${{ secrets.NOTION_RESOURCES_DATA_SOURCE_ID || vars.NOTION_RESOURCES_DATA_SOURCE_ID }}
+          NOTION_ACCESS_TRACKING_DATA_SOURCE_ID: ${{ secrets.NOTION_ACCESS_TRACKING_DATA_SOURCE_ID || vars.NOTION_ACCESS_TRACKING_DATA_SOURCE_ID }}
+          GH_APP_ID: ${{ secrets.GH_APP_ID || vars.GH_APP_ID }}
+          GH_INSTALLATION_ID: ${{ secrets.GH_INSTALLATION_ID || vars.GH_INSTALLATION_ID }}
+          GH_PRIVATE_KEY: ${{ secrets.GH_PRIVATE_KEY }}
+          GH_ORG: ${{ secrets.GH_ORG || vars.GH_ORG }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+          NOTION_WORKSPACE_INVITE_URL: ${{ secrets.NOTION_WORKSPACE_INVITE_URL || vars.NOTION_WORKSPACE_INVITE_URL }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          IAM_ENFORCEMENT_MODE: ${{ secrets.IAM_ENFORCEMENT_MODE || vars.IAM_ENFORCEMENT_MODE }}
+        run: node --input-type=module <<'EOF'
+import { writeFileSync } from "node:fs";
+
+const required = [
+  "NOTION_TOKEN",
+  "NOTION_USERS_DATA_SOURCE_ID",
+  "NOTION_POLICIES_DATA_SOURCE_ID",
+  "NOTION_RESOURCES_DATA_SOURCE_ID",
+  "NOTION_ACCESS_TRACKING_DATA_SOURCE_ID",
+  "GH_APP_ID",
+  "GH_INSTALLATION_ID",
+  "GH_PRIVATE_KEY",
+  "GH_ORG",
+  "SLACK_BOT_TOKEN",
+  "SLACK_SIGNING_SECRET",
+];
+const optional = [
+  "NOTION_WORKSPACE_INVITE_URL",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "IAM_ENFORCEMENT_MODE",
+];
+
+const secrets = { NODE_ENV: "production" };
+for (const key of required) {
+  const value = process.env[key];
+  if (!value || !String(value).trim()) {
+    throw new Error(`Missing required GitHub Environment secret/variable: ${key}`);
+  }
+  secrets[key] = value;
+}
+for (const key of optional) {
+  const value = process.env[key];
+  if (value && String(value).trim()) {
+    secrets[key] = value;
+  }
+}
+
+writeFileSync(".worker-secrets.json", JSON.stringify(secrets));
+EOF
+
+      - name: Deploy Worker
+        run: npx wrangler deploy --secrets-file .worker-secrets.json
+
+      - name: Delete secrets file
+        if: always()
+        run: rm -f .worker-secrets.json

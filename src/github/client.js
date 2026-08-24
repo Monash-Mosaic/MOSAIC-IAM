@@ -14,12 +14,12 @@ export async function getGitHubClient() {
   octokit = new Octokit({
     authStrategy: createAppAuth,
     auth: {
-      appId: env.GITHUB_APP_ID,
+      appId: env.GH_APP_ID,
       privateKey: getGitHubPrivateKey(),
-      installationId: env.GITHUB_INSTALLATION_ID,
+      installationId: env.GH_INSTALLATION_ID,
     },
   });
 
-  logger.info("[GITHUB]", `Authenticated GitHub App installation ${env.GITHUB_INSTALLATION_ID}`);
+  logger.info("[GITHUB]", `Authenticated GitHub App installation ${env.GH_INSTALLATION_ID}`);
   return octokit;
 }

@@ -1,6 +1,8 @@
 secrets/
 node_modules/
 .env
+.dev.vars
+.worker-secrets.json
 .DS_Store
 migration/github-users.json
 migration/
