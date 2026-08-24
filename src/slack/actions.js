@@ -33,7 +33,7 @@ export function registerActions(app) {
       try {
         await client.chat.postMessage({
           channel: body.user.id,
-          text: "Your onboarding was saved, but access provisioning failed.\nPlease contact an administrator.",
+          text: "Sorry — something went wrong while finishing onboarding. Please try again, or message the MOSAIC team if it keeps happening.",
         });
       } catch (dmError) {
         logger.error("[SLACK]", `Failed to send onboarding failure DM: ${dmError.message}`);

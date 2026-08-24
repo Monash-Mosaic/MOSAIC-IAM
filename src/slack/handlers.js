@@ -20,7 +20,7 @@ export async function sendWelcomeDm(client, user) {
 
   await client.chat.postMessage({
     channel: user.id,
-    text: "Welcome to MOSAIC. Click Start Onboarding to continue.",
+    text: "Hey, welcome to MOSAIC! Tap Get started and we'll set up your access.",
     blocks: buildWelcomeBlocks(),
   });
   logger.info("[SLACK]", `Sent onboarding welcome DM to ${user.id}`);
@@ -41,7 +41,7 @@ export async function openOnboardingModal(client, body) {
     logger.error("[SLACK]", `Could not load onboarding options: ${error.message}`);
     await client.chat.postMessage({
       channel: slackUserId,
-      text: "Onboarding is temporarily unavailable. Please contact an administrator.",
+      text: "Onboarding is taking a short break. Please try again in a moment, or message the MOSAIC team if it keeps happening.",
     });
   }
 }

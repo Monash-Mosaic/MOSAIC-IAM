@@ -11,9 +11,9 @@ export function buildOnboardingModal({ slackUserId, prefill = {}, options = { de
     type: "modal",
     callback_id: SLACK_VIEW_CALLBACK_ID,
     private_metadata: slackUserId || "",
-    title: { type: "plain_text", text: "Start Onboarding" },
-    submit: { type: "plain_text", text: "Submit" },
-    close: { type: "plain_text", text: "Cancel" },
+    title: { type: "plain_text", text: "Join MOSAIC" },
+    submit: { type: "plain_text", text: "Finish" },
+    close: { type: "plain_text", text: "Not now" },
     blocks: [
       {
         type: "input",
@@ -41,7 +41,7 @@ export function buildOnboardingModal({ slackUserId, prefill = {}, options = { de
         element: {
           type: "static_select",
           action_id: SLACK_ELEMENT_IDS.department,
-          placeholder: { type: "plain_text", text: "Select a department" },
+          placeholder: { type: "plain_text", text: "Choose your team" },
           options: selectOptions(options.departments),
         },
       },
@@ -52,7 +52,7 @@ export function buildOnboardingModal({ slackUserId, prefill = {}, options = { de
         element: {
           type: "static_select",
           action_id: SLACK_ELEMENT_IDS.role,
-          placeholder: { type: "plain_text", text: "Select a role" },
+          placeholder: { type: "plain_text", text: "Choose your role" },
           options: selectOptions(options.roles),
         },
       },
@@ -87,7 +87,7 @@ export function buildWelcomeBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "Welcome to MOSAIC. Start onboarding so we can provision your access from your department and role.",
+        text: "Hey, welcome to *MOSAIC* :wave:\nTell us your name, email, team, and role, and we'll get your access moving.",
       },
     },
     {
@@ -96,7 +96,7 @@ export function buildWelcomeBlocks() {
         {
           type: "button",
           action_id: SLACK_ACTION_IDS.startOnboarding,
-          text: { type: "plain_text", text: "Start Onboarding" },
+          text: { type: "plain_text", text: "Get started" },
           style: "primary",
         },
       ],

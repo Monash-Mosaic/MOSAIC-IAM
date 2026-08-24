@@ -9,23 +9,23 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function validateOnboardingInput({ name, email, department, role }) {
   const errors = {};
   if (!String(name ?? "").trim()) {
-    errors.name = "Full name is required.";
+    errors.name = "Please add your full name.";
   }
   const normalizedEmail = String(email ?? "").trim().toLowerCase();
   if (!normalizedEmail || !EMAIL_PATTERN.test(normalizedEmail)) {
-    errors.email = "Enter a valid email address.";
+    errors.email = "Please use a valid email address.";
   }
 
   const options = await getUserSelectOptions();
   if (!options.departments.length) {
-    errors.department = "Department options are not configured in Notion.";
+    errors.department = "Teams aren't loading right now. Please try again shortly.";
   } else if (!findSelectOption(options.departments, department)) {
-    errors.department = `Department must be one of: ${listSelectLabels(options.departments)}.`;
+    errors.department = `Please choose a department: ${listSelectLabels(options.departments)}.`;
   }
   if (!options.roles.length) {
-    errors.role = "Role options are not configured in Notion.";
+    errors.role = "Roles aren't loading right now. Please try again shortly.";
   } else if (!findSelectOption(options.roles, role)) {
-    errors.role = `Role must be one of: ${listSelectLabels(options.roles)}.`;
+    errors.role = `Please choose a role: ${listSelectLabels(options.roles)}.`;
   }
   return errors;
 }
@@ -83,7 +83,7 @@ export async function onboardingService(input, { dryRun = false } = {}) {
       saved: false,
       user: { ...input },
       reconcileResult: null,
-      message: "Onboarding could not be saved. Please contact an administrator.",
+      message: "Sorry, we couldn't save your onboarding just then. Please try again, or message the MOSAIC team.",
     };
   }
 
