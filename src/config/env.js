@@ -1,3 +1,4 @@
+import { createPrivateKey } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,6 +92,16 @@ function normalizePem(value) {
   return key;
 }
 
+/** GitHub App JWT libs require PKCS#8; GitHub-issued keys are often PKCS#1. */
+function normalizeGitHubPrivateKey(value) {
+  const pem = normalizePem(value);
+  if (!pem.includes("BEGIN RSA PRIVATE KEY")) {
+    return pem;
+  }
+  const key = createPrivateKey({ key: pem, format: "pem", type: "pkcs1" });
+  return key.export({ type: "pkcs8", format: "pem" });
+}
+
 function resolveGitHubPrivateKeyConfig() {
   const inline = optionalEnv("GH_PRIVATE_KEY");
   const configuredPath = optionalEnv("GH_PRIVATE_KEY_PATH");
@@ -104,7 +115,7 @@ function resolveGitHubPrivateKeyConfig() {
   }
   const privateKeyPath = resolvePrivateKeyPath(configuredPath);
   if (!isCloudflareWorkerRuntime() && !existsSync(privateKeyPath)) {
-    throw new Error(`GitHub App private key file not found: ${privateKeyPath}`);    throw new Error(`GitHub App private key file not found: ${privateKeyPath}`);
+    throw new Error(`GitHub App private key file not found: ${privateKeyPath}`);
   }
   return { GH_PRIVATE_KEY_PATH: privateKeyPath, hasInlinePrivateKey: false };
 }
@@ -225,7 +236,7 @@ export function getFigmaInviteUrl() {
 export function getGitHubPrivateKey() {
   const inline = optionalEnv("GH_PRIVATE_KEY");
   if (inline) {
-    return normalizePem(inline);
+    return normalizeGitHubPrivateKey(inline);
   }
   const env = getEnv();
   if (!env.GH_PRIVATE_KEY_PATH) {
@@ -233,7 +244,7 @@ export function getGitHubPrivateKey() {
       "Missing required environment variable: GH_PRIVATE_KEY or GH_PRIVATE_KEY_PATH",
     );
   }
-  return readFileSync(env.GH_PRIVATE_KEY_PATH, "utf8");
+  return normalizeGitHubPrivateKey(readFileSync(env.GH_PRIVATE_KEY_PATH, "utf8"));
 }
 
 export function isDebugEnabled() {
