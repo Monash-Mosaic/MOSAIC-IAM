@@ -106,14 +106,15 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
         dryRun,
       });
     } catch (error) {
-      logger.error("[IAM]", `Provider ${providerName} failed for ${user.email}: ${error.message}`);
+      const detail = error?.message || "Access could not be updated.";
+      logger.error("[IAM]", `Provider ${providerName} failed for ${user.email}: ${detail}`);
       outcome = {
         invitationCreated: false,
         mutated: false,
         results: providerResources.map((resource) => ({
           resource,
           status: "failed",
-          error: "Access could not be updated.",
+          error: detail,
           mutated: false,
         })),
       };

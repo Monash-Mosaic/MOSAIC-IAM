@@ -86,21 +86,32 @@ async function resolveGitHubTeams(resources) {
 async function ensureTeamMemberships(username, resolvedTeams, dryRun) {
   const results = [];
   for (const item of resolvedTeams) {
-    const alreadyMember = await isTeamMember({
-      teamSlug: item.team.slug,
-      username,
-    });
-    if (alreadyMember) {
-      results.push({ ...item, status: "active", mutated: false });
-      continue;
+    try {
+      const alreadyMember = await isTeamMember({
+        teamSlug: item.team.slug,
+        username,
+      });
+      if (alreadyMember) {
+        results.push({ ...item, status: "active", error: "", mutated: false });
+        continue;
+      }
+      if (dryRun) {
+        logger.info("[GITHUB]", `DRY RUN would add ${username} to team ${item.team.slug}`);
+        results.push({ ...item, status: "pending", error: "", mutated: true });
+        continue;
+      }
+      await addTeamMember({ teamSlug: item.team.slug, username });
+      results.push({ ...item, status: "active", error: "", mutated: true });
+    } catch (error) {
+      const message = `GitHub team ${item.resource?.code || item.team?.slug} update failed: ${error.message}`;
+      logger.error("[GITHUB]", message);
+      results.push({
+        ...item,
+        status: "failed",
+        error: message,
+        mutated: false,
+      });
     }
-    if (dryRun) {
-      logger.info("[GITHUB]", `DRY RUN would add ${username} to team ${item.team.slug}`);
-      results.push({ ...item, status: "pending", mutated: true });
-      continue;
-    }
-    await addTeamMember({ teamSlug: item.team.slug, username });
-    results.push({ ...item, status: "active", mutated: true });
   }
   return results;
 }
