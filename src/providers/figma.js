@@ -1,6 +1,7 @@
 import { logger } from "../utils/logger.js";
 import { getFigmaInviteUrl } from "../config/env.js";
 import { getAllResources } from "../notion/resources.js";
+import { provisionInviteLinkResource } from "../iam/inviteLinks.js";
 
 export const FIGMA_WORKSPACE_CODE = "FG-WK";
 export const FIGMA_WORKSPACE_CODE_ALIASES = ["FG-WK", "FG-WORKSPACE"];
@@ -57,35 +58,17 @@ export async function getFigmaWorkspaceResource() {
   };
 }
 
-function provisionInviteResource(resource) {
-  if (!resource.provisionEnabled) {
-    return {
-      resource,
-      status: "skipped",
-      error: "Provision is disabled for this resource",
-      mutated: false,
-    };
-  }
-  // Figma membership is not API-verified. Record desired+actual as Granted.
-  return {
-    resource,
-    status: "granted",
-    error: "",
-    mutated: false,
-    inviteUrl: resource.inviteUrl || "",
-  };
-}
-
-export async function reconcileFigmaAccess(user, resources, { dryRun = false } = {}) {
+export async function reconcileFigmaAccess(user, resources, { trackingRecords = [], dryRun = false } = {}) {
   const figmaResources = resources.filter(isFigmaResource);
   const results = figmaResources.map((resource) => {
+    const result = provisionInviteLinkResource(resource, trackingRecords);
     if (dryRun) {
       logger.info(
         "[FIGMA]",
-        `DRY RUN would mark ${resource.code} as granted for ${user.email} (invite links are not synced)`,
+        `DRY RUN would record ${resource.code} as ${result.status} for ${user.email}`,
       );
     }
-    return provisionInviteResource(resource);
+    return result;
   });
 
   return {
@@ -103,12 +86,7 @@ export const figmaProvider = {
   async provision(user, resource, context) {
     return reconcileFigmaAccess(user, [resource], context);
   },
-  async verify(_user, resource) {
-    return {
-      provider: "Figma",
-      invitationCreated: false,
-      mutated: false,
-      results: [provisionInviteResource(resource)],
-    };
+  async verify(user, resource, context) {
+    return reconcileFigmaAccess(user, [resource], context);
   },
 };

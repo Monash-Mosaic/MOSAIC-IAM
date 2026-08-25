@@ -1,5 +1,9 @@
 import { logger } from "../utils/logger.js";
 import { validateOnboardingInput, onboardingService } from "../iam/onboarding.js";
+import {
+  decodeInviteActionValue,
+  markInviteLinkJoined,
+} from "../iam/inviteLinks.js";
 import { getUserSelectOptions } from "../notion/userOptions.js";
 import { findUserBySlackId } from "../notion/users.js";
 import { buildOnboardingResultBlocks } from "../iam/accessSummary.js";
@@ -178,4 +182,57 @@ export async function completeOnboarding(client, slackUserId, input, { intent = 
   });
   logger.info("[SLACK]", `${intent === "update" ? "Profile update" : "Onboarding"} ${result.outcome} for Slack user ${slackUserId}`);
   return result;
+}
+
+export async function handleJoinInviteAction(client, body) {
+  const action = body?.actions?.[0];
+  const slackUserId = body?.user?.id;
+  const decoded = decodeInviteActionValue(action?.value);
+  if (!slackUserId || !decoded) {
+    throw new Error("Join invite action is missing Slack user or invite details");
+  }
+
+  const joined = await markInviteLinkJoined({
+    slackUserId,
+    resourceCode: decoded.code,
+    inviteUrl: decoded.inviteUrl,
+  });
+
+  const label =
+    decoded.provider === "figma"
+      ? "Figma"
+      : decoded.provider === "notion"
+        ? "Notion"
+        : joined.resource?.externalName || decoded.code;
+
+  await client.chat.postMessage({
+    channel: slackUserId,
+    text: `You're marked as joined for ${label}. Open the invite if it didn't open automatically: ${joined.inviteUrl}`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `Marked *${decoded.code}* as joined. Open your invite:`,
+        },
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: `Open ${label}` },
+            url: joined.inviteUrl,
+            style: "primary",
+          },
+        ],
+      },
+    ],
+  });
+
+  logger.info(
+    "[SLACK]",
+    `Join invite ${decoded.code} tracked for Slack user ${slackUserId}`,
+  );
+  return joined;
 }

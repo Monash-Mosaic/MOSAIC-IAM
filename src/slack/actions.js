@@ -8,6 +8,7 @@ import {
 import {
   completeOnboarding,
   extractOnboardingSubmission,
+  handleJoinInviteAction,
   modalValidationErrors,
   openOnboardingModal,
   openUpdateModal,
@@ -57,6 +58,23 @@ export function registerActions(app) {
       await openOnboardingModal(client, body);
     } catch (error) {
       logger.error("[SLACK]", `Failed to open onboarding modal: ${error.message}`);
+    }
+  });
+
+  app.action(SLACK_ACTION_IDS.joinInvite, async ({ ack, body, client }) => {
+    await ack();
+    try {
+      await handleJoinInviteAction(client, body);
+    } catch (error) {
+      logger.error("[SLACK]", `Join invite action failed: ${error.message}`);
+      try {
+        await client.chat.postMessage({
+          channel: body.user?.id,
+          text: "Sorry — we couldn't record that join just then. Please try again, or message the MOSAIC team.",
+        });
+      } catch (dmError) {
+        logger.error("[SLACK]", `Failed to send join invite failure DM: ${dmError.message}`);
+      }
     }
   });
 

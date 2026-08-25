@@ -1,3 +1,5 @@
+import { encodeInviteActionValue } from "./inviteLinks.js";
+
 function firstName(user) {
   const name = String(user?.name ?? "").trim();
   return name.split(/\s+/)[0] || "there";
@@ -41,7 +43,7 @@ function statusLabel(status) {
 
 const INVITE_PROVIDERS = new Set(["notion", "figma"]);
 const SUCCESS_STATUSES = new Set(["active", "granted"]);
-const USER_JOIN_STATUSES = new Set(["awaiting_user_action"]);
+const USER_JOIN_STATUSES = new Set(["awaiting_user_action", "needs_configuration"]);
 
 const WORKSPACE_CODES = new Set([
   "nt-workspace",
@@ -204,11 +206,17 @@ function buildInviteSectionLines(provider, actions) {
     text: lines.join("\n"),
     buttons: configured.map((action) => ({
       type: "button",
+      action_id: "iam_join_invite",
       text: {
         type: "plain_text",
         text: truncateButtonText(inviteButtonLabel(action)),
       },
-      url: action.inviteUrl,
+      value: encodeInviteActionValue({
+        code: action.code,
+        inviteUrl: action.inviteUrl,
+        provider: action.provider,
+      }),
+      style: "primary",
     })),
   };
 }

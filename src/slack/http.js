@@ -9,6 +9,7 @@ import {
 import {
   completeOnboarding,
   extractOnboardingSubmission,
+  handleJoinInviteAction,
   modalValidationErrors,
   openOnboardingModal,
   openUpdateModal,
@@ -65,6 +66,25 @@ async function handleStartOnboarding(payload) {
   } catch (error) {
     logger.error("[SLACK]", `Failed to open onboarding modal: ${error.message}`);
   }
+}
+
+async function handleJoinInvite(payload, ctx) {
+  const client = createClient();
+  schedule(ctx, async () => {
+    try {
+      await handleJoinInviteAction(client, payload);
+    } catch (error) {
+      logger.error("[SLACK]", `Join invite action failed: ${error.message}`);
+      try {
+        await client.chat.postMessage({
+          channel: payload.user?.id,
+          text: "Sorry — we couldn't record that join just then. Please try again, or message the MOSAIC team.",
+        });
+      } catch (dmError) {
+        logger.error("[SLACK]", `Failed to send join invite failure DM: ${dmError.message}`);
+      }
+    }
+  });
 }
 
 async function handleIamUpdateCommand(form) {
@@ -182,6 +202,9 @@ export async function handleSlackInteractions(request, ctx) {
       const actionIds = (payload.actions ?? []).map((action) => action.action_id);
       if (actionIds.includes(SLACK_ACTION_IDS.startOnboarding)) {
         await handleStartOnboarding(payload);
+      }
+      if (actionIds.includes(SLACK_ACTION_IDS.joinInvite)) {
+        await handleJoinInvite(payload, ctx);
       }
       return emptyAck();
     }

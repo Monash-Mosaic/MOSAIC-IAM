@@ -1,6 +1,7 @@
 import { logger } from "../utils/logger.js";
 import { getNotionWorkspaceInviteUrl } from "../config/env.js";
 import { getAllResources } from "../notion/resources.js";
+import { provisionInviteLinkResource } from "../iam/inviteLinks.js";
 
 export const NOTION_WORKSPACE_CODE = "NT-WORKSPACE";
 
@@ -54,35 +55,17 @@ export async function getNotionWorkspaceResource() {
   };
 }
 
-function provisionInviteResource(resource) {
-  if (!resource.provisionEnabled) {
-    return {
-      resource,
-      status: "skipped",
-      error: "Provision is disabled for this resource",
-      mutated: false,
-    };
-  }
-  // Notion membership is not API-verified. Record desired+actual as Granted.
-  return {
-    resource,
-    status: "granted",
-    error: "",
-    mutated: false,
-    inviteUrl: resource.inviteUrl || "",
-  };
-}
-
-export async function reconcileNotionAccess(user, resources, { dryRun = false } = {}) {
+export async function reconcileNotionAccess(user, resources, { trackingRecords = [], dryRun = false } = {}) {
   const notionResources = resources.filter(isNotionResource);
   const results = notionResources.map((resource) => {
+    const result = provisionInviteLinkResource(resource, trackingRecords);
     if (dryRun) {
       logger.info(
         "[NOTION]",
-        `DRY RUN would mark ${resource.code} as granted for ${user.email} (invite links are not synced)`,
+        `DRY RUN would record ${resource.code} as ${result.status} for ${user.email}`,
       );
     }
-    return provisionInviteResource(resource);
+    return result;
   });
 
   return {
@@ -100,12 +83,7 @@ export const notionProvider = {
   async provision(user, resource, context) {
     return reconcileNotionAccess(user, [resource], context);
   },
-  async verify(_user, resource) {
-    return {
-      provider: "Notion",
-      invitationCreated: false,
-      mutated: false,
-      results: [provisionInviteResource(resource)],
-    };
+  async verify(user, resource, context) {
+    return reconcileNotionAccess(user, [resource], context);
   },
 };

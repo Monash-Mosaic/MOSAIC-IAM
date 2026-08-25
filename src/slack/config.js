@@ -1,5 +1,6 @@
 export const SLACK_ACTION_IDS = {
   startOnboarding: "iam_start_onboarding",
+  joinInvite: "iam_join_invite",
 };
 
 export const SLACK_COMMANDS = {
