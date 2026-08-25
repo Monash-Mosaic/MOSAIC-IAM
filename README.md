@@ -52,7 +52,7 @@ How to test the Slack flow:
 4. Complete the modal (Full Name, Email, Department, Role). Department/Role come from Notion. Email is the identity used for provisioning; GitHub username is not collected.
 5. Confirm the **IAM - Users** record (Status `Active`, Slack User ID set).
 6. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**.
-7. Use the Notion invite buttons in the result DM (`Join Notion Workspace` plus any policy teamspace buttons). Those rows stay **Awaiting User Action** until later verification.
+7. Use the Notion and Figma invite buttons in the result DM (`Join MOSAIC Notion Workspace`, `Join MOSAIC Figma`, plus any teamspace buttons). Those rows stay **Awaiting User Action** until later verification.
 8. Type `/iam-update` in Slack to reopen your details, confirm them, and save changes. Team or role updates re-run access provisioning.
 
 ## Google Drive OAuth (optional)
@@ -81,8 +81,17 @@ Map those IDs into **IAM - Access Resources** (`Provider: GoogleDrive`, `Resourc
 
 Notion Plus has no SCIM in this engine. Workspace membership is a user-action invite:
 
-- Set `NOTION_WORKSPACE_INVITE_URL` for every onboarded user (`NT-WORKSPACE`).
+- Set `NOTION_WORKSPACE_INVITE_URL` for every onboarded user (`NT-WORKSPACE`), or put the URL on the `NT-WORKSPACE` Access Resource.
 - Teamspace invite URLs belong on **IAM - Access Resources** (`Invite URL`), for example `NT-EN`. Slack buttons are generated from resolved RBAC resources, not hardcoded department maps.
+- Button labels include the product name, for example `Join MOSAIC Notion Workspace` and `Join Operations Notion Teamspace`.
+
+## Figma invite links
+
+Figma workspace access is the same pattern as Notion (invite link, no API provisioning):
+
+- Add **IAM - Access Resources** row `FG-WK` (`Provider: Figma`, `Resource Type: Workspace`, `Invite URL`).
+- Or set `FIGMA_INVITE_URL` as a fallback when the resource has no Invite URL.
+- Onboarding DMs include a `Join MOSAIC Figma` button whenever the workspace invite is available.
 
 ## Demo onboarding (no Slack)
 
@@ -158,7 +167,9 @@ Optional GitHub identity file (gitignored): `migration/github-users.json`
 }
 ```
 
-Matching order for GitHub logins: public/profile email → IAM `GitHub Username` → migration file → unresolved (manual mapping; no fake IAM user).
+Matching order for GitHub logins: public/profile email → IAM `GitHub Username` → migration file.
+
+Unresolved logins still get **Access Tracking** rows for each IAM-managed GitHub team membership. Those rows store the GitHub username, leave **Users** / **Email** empty, and use a title like `@login / GH-EN` so you can assign the IAM user manually afterward.
 
 Dry-run first (discovery/matching only; no Notion writes):
 
@@ -174,4 +185,4 @@ npm run bootstrap:github
 npm run bootstrap:all
 ```
 
-Imported Access Tracking rows use `Source=Imported`, `Status=Active`, `Action=Existing Access`. Users without Department/Role need manual classification before enforcement.
+Imported Access Tracking rows use `Source=Imported`, `Status=Active`/`Granted`, `Action=Existing Access` when those Notion fields exist. Unmapped GitHub members still create tracking rows for manual Users assignment. Users without Department/Role need manual classification before enforcement.

@@ -3,15 +3,22 @@ import { getDataSourceSchema } from "./fields.js";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+const HIDDEN_ROLES = new Set(["founding advisor"]);
+
 let optionsCache = {
   value: null,
   expiresAt: 0,
 };
 
-function toOptions(names = []) {
+function isHiddenRole(name) {
+  return HIDDEN_ROLES.has(String(name ?? "").trim().toLowerCase());
+}
+
+function toOptions(names = [], { excludeHiddenRoles = false } = {}) {
   return names
     .map((name) => String(name).trim())
     .filter(Boolean)
+    .filter((name) => !excludeHiddenRoles || !isHiddenRole(name))
     .map((name) => ({ value: name, label: name }));
 }
 
@@ -31,7 +38,7 @@ export async function getUserSelectOptions({ force = false } = {}) {
 
   const schema = await getDataSourceSchema("users");
   const departments = toOptions(schema.fields.department?.options);
-  const roles = toOptions(schema.fields.role?.options);
+  const roles = toOptions(schema.fields.role?.options, { excludeHiddenRoles: true });
   const value = { departments, roles };
   optionsCache = {
     value,

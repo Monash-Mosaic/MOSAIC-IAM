@@ -1,3 +1,4 @@
+import { figmaProvider } from "./figma.js";
 import { githubProvider } from "./github.js";
 import { googleDriveProvider } from "./googleDrive.js";
 import { notionProvider } from "./notion.js";
@@ -11,6 +12,8 @@ const registry = new Map([
   ["gd", googleDriveProvider],
   ["notion", notionProvider],
   ["nt", notionProvider],
+  ["figma", figmaProvider],
+  ["fg", figmaProvider],
   ["slack", slackProvider],
 ]);
 

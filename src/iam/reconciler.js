@@ -6,9 +6,20 @@ import {
 } from "../notion/accessTracking.js";
 import { updateUserProvisioningStatus } from "../notion/users.js";
 import { getProvider } from "../providers/index.js";
+import { FIGMA_WORKSPACE_CODE_ALIASES, getFigmaWorkspaceResource } from "../providers/figma.js";
 import { getNotionWorkspaceResource } from "../providers/notion.js";
 import { groupResourcesByProvider, resolveDesiredAccess } from "./resolver.js";
 import { deriveProvisioningStatus } from "./status.js";
+
+function withDefaultResource(resources, extra) {
+  const codes = new Set(
+    [extra.code, ...(extra.codeAliases ?? [])].map((code) => String(code ?? "").trim().toUpperCase()).filter(Boolean),
+  );
+  if (resources.some((resource) => codes.has(resource.code.trim().toUpperCase()))) {
+    return resources;
+  }
+  return [...resources, extra];
+}
 
 function findPolicyForResource(policies, resource) {
   return (
@@ -31,12 +42,17 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
   }
 
   const { policies, resources: resolvedResources } = await resolveDesiredAccess(user);
-  const workspaceResource = await getNotionWorkspaceResource();
-  const resources = resolvedResources.some(
-    (resource) => resource.code.trim().toUpperCase() === workspaceResource.code.trim().toUpperCase(),
-  )
-    ? resolvedResources
-    : [...resolvedResources, workspaceResource];
+  const [notionWorkspace, figmaWorkspace] = await Promise.all([
+    getNotionWorkspaceResource(),
+    getFigmaWorkspaceResource(),
+  ]);
+  const resources = withDefaultResource(
+    withDefaultResource(resolvedResources, notionWorkspace),
+    {
+      ...figmaWorkspace,
+      codeAliases: FIGMA_WORKSPACE_CODE_ALIASES,
+    },
+  );
   const trackingRecords = await getTrackingRecordsForUser(user);
   const now = new Date().toISOString();
 

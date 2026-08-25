@@ -13,6 +13,7 @@ const WORKER_BINDING_KEYS = [
   "NOTION_RESOURCES_DATA_SOURCE_ID",
   "NOTION_ACCESS_TRACKING_DATA_SOURCE_ID",
   "NOTION_WORKSPACE_INVITE_URL",
+  "FIGMA_INVITE_URL",
   "GH_APP_ID",
   "GH_INSTALLATION_ID",
   "GH_PRIVATE_KEY",
@@ -215,6 +216,10 @@ export function isGoogleConfigured() {
 
 export function getNotionWorkspaceInviteUrl() {
   return optionalEnv("NOTION_WORKSPACE_INVITE_URL");
+}
+
+export function getFigmaInviteUrl() {
+  return optionalEnv("FIGMA_INVITE_URL");
 }
 
 export function getGitHubPrivateKey() {

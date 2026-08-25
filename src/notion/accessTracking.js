@@ -132,8 +132,26 @@ export async function findTrackingRecord(user, resourceCode, resourcePageId) {
   );
 }
 
+export async function findTrackingRecordByGithubLogin(githubLogin, resourceCode, resourcePageId) {
+  const login = String(githubLogin ?? "").trim().toLowerCase();
+  if (!login) {
+    return null;
+  }
+  const records = await getAllTrackingRecords();
+  const code = String(resourceCode ?? "").trim().toLowerCase();
+  const forLogin = records.filter(
+    (record) => String(record.githubLogin ?? "").trim().toLowerCase() === login,
+  );
+  return (
+    forLogin.find((record) => resourcePageId && record.resourceIds?.includes(resourcePageId)) ??
+    forLogin.find((record) => recordCodeHint(record).toLowerCase() === code) ??
+    forLogin.find((record) => recordName(record).toLowerCase().includes(code)) ??
+    null
+  );
+}
+
 export async function upsertAccessTracking({
-  user,
+  user = null,
   policy,
   resource,
   status,
@@ -146,9 +164,13 @@ export async function upsertAccessTracking({
 }) {
   const env = getEnv();
   const schema = await getDataSourceSchema("accessTracking");
-  const existing = await findTrackingRecord(user, resource.code, resource.pageId);
+  const login = String(githubLogin ?? "").trim();
+  const existing = user
+    ? await findTrackingRecord(user, resource.code, resource.pageId)
+    : await findTrackingRecordByGithubLogin(login, resource.code, resource.pageId);
   const now = new Date().toISOString();
-  const title = `${user.email} / ${resource.code}`;
+  const identity = user?.email || (login ? `@${login}` : "unknown");
+  const title = `${identity} / ${resource.code}`;
   const normalizedStatus = String(status).toLowerCase();
 
   const properties = {
@@ -156,9 +178,9 @@ export async function upsertAccessTracking({
     ...buildPropertyWrite(
       schema,
       "user",
-      user.pageId && user.pageId !== "dry-run" ? [user.pageId] : [],
+      user?.pageId && user.pageId !== "dry-run" ? [user.pageId] : [],
     ),
-    ...buildPropertyWrite(schema, "email", user.email),
+    ...buildPropertyWrite(schema, "email", user?.email || ""),
     ...buildPropertyWrite(schema, "policy", policy?.pageId ? [policy.pageId] : []),
     ...buildPropertyWrite(schema, "resource", resource.pageId ? [resource.pageId] : []),
     ...buildPropertyWrite(schema, "provider", resource.provider || "GitHub"),
@@ -175,7 +197,7 @@ export async function upsertAccessTracking({
       "externalResourceId",
       resource.externalResourceId == null ? "" : String(resource.externalResourceId),
     ),
-    ...buildPropertyWrite(schema, "githubLogin", githubLogin || ""),
+    ...buildPropertyWrite(schema, "githubLogin", login || ""),
     ...buildPropertyWrite(schema, "error", error || ""),
     ...buildPropertyWrite(schema, "lastSync", now),
   };
@@ -196,7 +218,9 @@ export async function upsertAccessTracking({
   if (dryRun) {
     logger.info(
       "[TRACKING]",
-      `DRY RUN would ${existing ? "update" : "create"} ${resource.code} -> ${status}`,
+      `DRY RUN would ${existing ? "update" : "create"} ${resource.code} -> ${status}${
+        login ? ` (@${login})` : ""
+      }`,
     );
     return existing;
   }
@@ -207,11 +231,14 @@ export async function upsertAccessTracking({
       page_id: existing.pageId,
       properties,
     });
-    logger.info("[TRACKING]", `${resource.code} -> ${status}`);
+    logger.info("[TRACKING]", `${resource.code} -> ${status}${login ? ` (@${login})` : ""}`);
     existing.status = status;
     existing.invitationId = invitationId ?? existing.invitationId;
-    existing.githubLogin = githubLogin || existing.githubLogin;
+    existing.githubLogin = login || existing.githubLogin;
     existing.error = error || "";
+    if (user?.email) {
+      existing.email = user.email;
+    }
     return existing;
   }
 
@@ -219,15 +246,15 @@ export async function upsertAccessTracking({
     parent: { data_source_id: env.NOTION_ACCESS_TRACKING_DATA_SOURCE_ID },
     properties,
   });
-  logger.info("[TRACKING]", `${resource.code} -> ${status}`);
+  logger.info("[TRACKING]", `${resource.code} -> ${status}${login ? ` (@${login})` : ""}`);
   const mapped = {
     pageId: created.id,
     name: title,
-    email: user.email,
+    email: user?.email || "",
     status,
     invitationId: invitationId ?? null,
-    githubLogin: githubLogin || null,
-    userIds: [user.pageId].filter(Boolean),
+    githubLogin: login || null,
+    userIds: user?.pageId ? [user.pageId] : [],
     resourceIds: [resource.pageId].filter(Boolean),
     resourceCodeHint: resource.code || "",
     error: error || "",

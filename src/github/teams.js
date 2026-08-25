@@ -18,11 +18,14 @@ export async function listOrgTeams() {
 }
 
 export async function getTeamById(teamId) {
-  const octokit = await getGitHubClient();
-  const { data } = await octokit.rest.teams.getById({
-    team_id: Number(teamId),
-  });
-  return data;
+  // Legacy GET /teams/{team_id} (octokit.rest.teams.getById) was removed.
+  // Resolve by ID from the org team list instead.
+  const teams = await listOrgTeams();
+  const match = teams.find((team) => String(team.id) === String(teamId));
+  if (!match) {
+    throw new Error(`GitHub team ${teamId} not found in org`);
+  }
+  return match;
 }
 
 export async function resolveTeam({ externalResourceId, externalName, code }) {

@@ -1,7 +1,11 @@
 import { logger } from "../utils/logger.js";
 import { getGitHubUserProfile, listOrgMembers } from "../github/members.js";
 import { listTeamMembers, resolveTeam } from "../github/teams.js";
-import { findTrackingRecord, upsertAccessTracking } from "../notion/accessTracking.js";
+import {
+  findTrackingRecord,
+  findTrackingRecordByGithubLogin,
+  upsertAccessTracking,
+} from "../notion/accessTracking.js";
 import { getDataSourceSchema } from "../notion/fields.js";
 import { getAllResources } from "../notion/resources.js";
 import { getAllUsers, upsertImportedIamUser } from "../notion/users.js";
@@ -88,8 +92,10 @@ export async function bootstrapGitHub({ dryRun = false, knownUsers = [] } = {}) 
         }
       }
     } else {
-      logger.warn("[GITHUB]", `GitHub user ${login} could not be mapped to an IAM email.`);
-      logger.warn("[GITHUB]", "Manual mapping required.");
+      logger.info(
+        "[GITHUB]",
+        `GitHub user ${login} has no IAM email match; importing Access Tracking for manual user assignment.`,
+      );
     }
     mappingCache.set(key, mapped);
     return mapped;
@@ -101,6 +107,7 @@ export async function bootstrapGitHub({ dryRun = false, knownUsers = [] } = {}) 
 
   let trackingCreates = 0;
   let trackingUpdates = 0;
+  let unmappedTracking = 0;
 
   for (const resource of iamTeams) {
     const team = await resolveTeam({
@@ -118,12 +125,13 @@ export async function bootstrapGitHub({ dryRun = false, knownUsers = [] } = {}) 
     const members = await listTeamMembers({ teamSlug: team.slug });
     for (const member of members) {
       const mapped = await resolveIdentity(member.login);
-      if (!mapped.user?.email) {
-        continue;
-      }
-      const existing = await findTrackingRecord(mapped.user, resource.code, resource.pageId);
+      const user = mapped.user?.email ? mapped.user : null;
+      const existing = user
+        ? await findTrackingRecord(user, resource.code, resource.pageId)
+        : await findTrackingRecordByGithubLogin(member.login, resource.code, resource.pageId);
+
       await upsertAccessTracking({
-        user: mapped.user,
+        user,
         policy: null,
         resource: {
           ...resource,
@@ -135,6 +143,10 @@ export async function bootstrapGitHub({ dryRun = false, knownUsers = [] } = {}) 
         action: "Existing Access",
         dryRun,
       });
+
+      if (!user) {
+        unmappedTracking += 1;
+      }
       if (existing) {
         trackingUpdates += 1;
       } else {
@@ -148,12 +160,20 @@ export async function bootstrapGitHub({ dryRun = false, knownUsers = [] } = {}) 
     .filter(([, item]) => !item.user)
     .map(([login]) => login);
 
+  if (unmappedTracking) {
+    logger.info(
+      "[GITHUB]",
+      `${unmappedTracking} Access Tracking row(s) left without a Users relation — assign IAM users manually.`,
+    );
+  }
+
   return {
     orgMembers: orgMembers.length,
     teamsScanned: iamTeams.length,
     mappedAutomatically,
     unresolved: unresolvedLogins.length,
     unresolvedLogins,
+    unmappedTracking,
     trackingCreates,
     trackingUpdates,
     trackingTotal: trackingCreates + trackingUpdates,

@@ -15,6 +15,12 @@ function printSummary({ slack, github, dryRun }) {
     logger.info("[GITHUB]", `Scanning ${github.teamsScanned} IAM-managed teams`);
     logger.info("[GITHUB]", `Mapped automatically: ${github.mappedAutomatically}`);
     logger.info("[GITHUB]", `Unresolved identities: ${github.unresolved}`);
+    if (github.unmappedTracking) {
+      logger.info(
+        "[GITHUB]",
+        `${github.unmappedTracking} tracking row(s) need a manual Users assignment`,
+      );
+    }
   }
   logger.info("[IMPORT]", `${dryRun ? "Would create/update" : "Created/updated"} ${userMutations} IAM users`);
   logger.info(

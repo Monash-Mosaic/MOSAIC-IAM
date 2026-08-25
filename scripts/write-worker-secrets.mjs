@@ -16,6 +16,7 @@ const required = [
 
 const optional = [
   "NOTION_WORKSPACE_INVITE_URL",
+  "FIGMA_INVITE_URL",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
   "GOOGLE_REFRESH_TOKEN",

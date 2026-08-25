@@ -54,8 +54,9 @@ function userDetailInputBlocks({ prefill = {}, options = { departments: [], role
       block_id: SLACK_BLOCK_IDS.email,
       label: { type: "plain_text", text: "Email" },
       element: {
-        type: "email_text_input",
+        type: "plain_text_input",
         action_id: SLACK_ELEMENT_IDS.email,
+        placeholder: { type: "plain_text", text: "you@student.monash.edu" },
         initial_value: prefill.email || undefined,
       },
     },
