@@ -33,6 +33,7 @@ function slackProfilePrefill(member) {
       member.name?.trim() ||
       "",
     email: String(member.profile?.email ?? "").trim().toLowerCase(),
+    mobile: String(member.profile?.phone ?? "").trim(),
   };
 }
 
@@ -45,6 +46,7 @@ async function loadUpdatePrefill(client, slackUserId) {
       prefill: {
         name: iamUser.name,
         email: iamUser.email,
+        mobile: iamUser.mobile || "",
         department: iamUser.department,
         role: iamUser.role,
       },
@@ -65,6 +67,7 @@ async function loadUpdatePrefill(client, slackUserId) {
     prefill: {
       name: profile.name || "",
       email: profile.email || "",
+      mobile: profile.mobile || "",
       department: "",
       role: "",
     },
@@ -88,13 +91,20 @@ export async function sendWelcomeDm(client, user) {
 export async function openOnboardingModal(client, body) {
   const slackUserId = slackUserIdFromBody(body);
   try {
-    const options = await getUserSelectOptions();
+    const [options, details] = await Promise.all([
+      getUserSelectOptions(),
+      loadUpdatePrefill(client, slackUserId),
+    ]);
     if (!options.departments.length || !options.roles.length) {
       throw new Error("Department or Role options are not configured in Notion");
     }
     await client.views.open({
       trigger_id: body.trigger_id,
-      view: buildOnboardingModal({ slackUserId, options }),
+      view: buildOnboardingModal({
+        slackUserId,
+        prefill: details.prefill,
+        options,
+      }),
     });
   } catch (error) {
     logger.error("[SLACK]", `Could not load onboarding options: ${error.message}`);
@@ -149,6 +159,9 @@ export async function modalValidationErrors(parsed) {
   }
   if (errors.email) {
     mapped[SLACK_BLOCK_IDS.email] = errors.email;
+  }
+  if (errors.mobile) {
+    mapped[SLACK_BLOCK_IDS.mobile] = errors.mobile;
   }
   if (errors.department) {
     mapped[SLACK_BLOCK_IDS.department] = errors.department;

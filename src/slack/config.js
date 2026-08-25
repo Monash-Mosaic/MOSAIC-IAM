@@ -10,6 +10,7 @@ export const SLACK_COMMANDS = {
 export const SLACK_BLOCK_IDS = {
   name: "iam_onboarding_name",
   email: "iam_onboarding_email",
+  mobile: "iam_onboarding_mobile",
   department: "iam_onboarding_department",
   role: "iam_onboarding_role",
 };
@@ -17,6 +18,7 @@ export const SLACK_BLOCK_IDS = {
 export const SLACK_ELEMENT_IDS = {
   name: "iam_onboarding_name_input",
   email: "iam_onboarding_email_input",
+  mobile: "iam_onboarding_mobile_input",
   department: "iam_onboarding_department_select",
   role: "iam_onboarding_role_select",
 };

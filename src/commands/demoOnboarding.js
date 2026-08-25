@@ -18,6 +18,7 @@ function parseArgs(argv) {
     dryRun: false,
     name: null,
     email: null,
+    mobile: null,
     department: null,
     role: null,
   };
@@ -28,7 +29,13 @@ function parseArgs(argv) {
       args.dryRun = true;
       continue;
     }
-    if (arg === "--name" || arg === "--email" || arg === "--department" || arg === "--role") {
+    if (
+      arg === "--name" ||
+      arg === "--email" ||
+      arg === "--mobile" ||
+      arg === "--department" ||
+      arg === "--role"
+    ) {
       const key = arg.slice(2);
       const result = readFlagValue(argv, index);
       args[key] = result.value;
@@ -51,9 +58,9 @@ async function warmup() {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.name || !args.email || !args.department || !args.role) {
+  if (!args.name || !args.email || !args.mobile || !args.department || !args.role) {
     throw new Error(
-      'Usage: npm run demo:onboarding -- --name "Test User" --email test@example.com --department Engineering --role Developer [--dry-run]',
+      'Usage: npm run demo:onboarding -- --name "Test User" --email test@example.com --mobile "+61412345678" --department Engineering --role Developer [--dry-run]',
     );
   }
 
@@ -67,6 +74,7 @@ async function main() {
     {
       name: args.name,
       email: args.email,
+      mobile: args.mobile,
       department: args.department,
       role: args.role,
     },

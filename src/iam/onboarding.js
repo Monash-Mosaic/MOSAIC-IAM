@@ -5,10 +5,12 @@ import { reconcileUser } from "./reconciler.js";
 import { buildOnboardingResultText } from "./accessSummary.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MOBILE_PATTERN = /^\+?[\d\s().-]{8,20}$/;
 
 export async function validateOnboardingInput({
   name,
   email,
+  mobile,
   department,
   role,
   slackUserId,
@@ -21,6 +23,12 @@ export async function validateOnboardingInput({
   const normalizedEmail = String(email ?? "").trim().toLowerCase();
   if (!normalizedEmail || !EMAIL_PATTERN.test(normalizedEmail)) {
     errors.email = "Please use a valid email address.";
+  }
+  const normalizedMobile = String(mobile ?? "").trim();
+  if (!normalizedMobile) {
+    errors.mobile = "Please add your mobile number.";
+  } else if (!MOBILE_PATTERN.test(normalizedMobile) || !/\d{8,}/.test(normalizedMobile.replace(/\D/g, ""))) {
+    errors.mobile = "Please use a valid mobile number.";
   }
 
   const options = await getUserSelectOptions();
@@ -51,6 +59,7 @@ export async function validateOnboardingInput({
 export async function normalizeOnboardingInput({
   name,
   email,
+  mobile,
   department,
   role,
   slackUserId,
@@ -59,6 +68,7 @@ export async function normalizeOnboardingInput({
   const errors = await validateOnboardingInput({
     name,
     email,
+    mobile,
     department,
     role,
     slackUserId,
@@ -74,6 +84,7 @@ export async function normalizeOnboardingInput({
   return {
     name: String(name).trim(),
     email: String(email).trim().toLowerCase(),
+    mobile: String(mobile).trim(),
     department: findSelectOption(options.departments, department).value,
     role: findSelectOption(options.roles, role).value,
     slackUserId: slackUserId ? String(slackUserId).trim() : "",

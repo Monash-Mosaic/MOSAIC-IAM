@@ -35,6 +35,16 @@ export function getEmail(property) {
   return getRichText(property) || getTitle(property);
 }
 
+export function getPhoneNumber(property) {
+  if (!property) {
+    return "";
+  }
+  if (property.type === "phone_number") {
+    return String(property.phone_number ?? "").trim();
+  }
+  return getRichText(property) || getTitle(property);
+}
+
 export function getSelect(property) {
   if (!property) {
     return "";
@@ -139,6 +149,8 @@ export function getPropertyValue(property) {
       return getRichText(property);
     case "email":
       return getEmail(property);
+    case "phone_number":
+      return getPhoneNumber(property);
     case "select":
     case "status":
       return getSelect(property);
@@ -198,6 +210,11 @@ export function notionRelation(ids = []) {
 
 export function notionEmail(value) {
   return { email: value || null };
+}
+
+export function notionPhoneNumber(value) {
+  const phone = String(value ?? "").trim();
+  return { phone_number: phone || null };
 }
 
 export function notionNumber(value) {

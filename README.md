@@ -49,7 +49,7 @@ How to test the Slack flow:
 1. Start the bot with `npm run slack`.
 2. Add or invite a real Slack user to the workspace (bots are ignored), or send a test DM with `npm run slack:test-dm -- --user U0123456789`.
 3. The bot DMs a welcome message with **Start Onboarding**.
-4. Complete the modal (Full Name, Email, Department, Role). Department/Role come from Notion. Email is the identity used for provisioning; GitHub username is not collected.
+4. Complete the modal (Full Name, Email, Mobile, Department, Role). Department/Role come from Notion. Email is the identity used for provisioning; GitHub username is not collected. Mobile is saved to the Users **Mobile** field.
 5. Confirm the **IAM - Users** record (Status `Active`, Slack User ID set).
 6. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**.
 7. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**. Notion and Figma start as **Pending** with join buttons in Slack; after the user taps join they become **Granted** / **Synced**.

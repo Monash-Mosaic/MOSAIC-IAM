@@ -62,6 +62,17 @@ function userDetailInputBlocks({ prefill = {}, options = { departments: [], role
     },
     {
       type: "input",
+      block_id: SLACK_BLOCK_IDS.mobile,
+      label: { type: "plain_text", text: "Mobile" },
+      element: {
+        type: "plain_text_input",
+        action_id: SLACK_ELEMENT_IDS.mobile,
+        placeholder: { type: "plain_text", text: "+61 4xx xxx xxx" },
+        initial_value: prefill.mobile || undefined,
+      },
+    },
+    {
+      type: "input",
       block_id: SLACK_BLOCK_IDS.department,
       label: { type: "plain_text", text: "Department" },
       element: {
@@ -133,6 +144,8 @@ export function parseOnboardingModal(view) {
     values[SLACK_BLOCK_IDS.name]?.[SLACK_ELEMENT_IDS.name]?.value?.trim() ?? "";
   const email =
     values[SLACK_BLOCK_IDS.email]?.[SLACK_ELEMENT_IDS.email]?.value?.trim() ?? "";
+  const mobile =
+    values[SLACK_BLOCK_IDS.mobile]?.[SLACK_ELEMENT_IDS.mobile]?.value?.trim() ?? "";
   const department =
     values[SLACK_BLOCK_IDS.department]?.[SLACK_ELEMENT_IDS.department]?.selected_option
       ?.value ?? "";
@@ -143,6 +156,7 @@ export function parseOnboardingModal(view) {
   return {
     name,
     email,
+    mobile,
     department,
     role,
     slackUserId: metadata.slackUserId,
@@ -156,7 +170,7 @@ export function buildWelcomeBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "Hey, welcome to *MOSAIC* :wave:\nTell us your name, email, team, and role, and we'll get your access moving.",
+        text: "Hey, welcome to *MOSAIC* :wave:\nTell us your name, email, mobile, team, and role, and we'll get your access moving.",
       },
     },
     {

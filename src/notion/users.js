@@ -44,6 +44,7 @@ function mapUser(page, schema) {
     provisioningStatus: readMappedText(page, schema, "provisioningStatus"),
     slackUserId: readMappedText(page, schema, "slackUserId"),
     githubUsername: readMappedText(page, schema, "githubUsername"),
+    mobile: readMappedText(page, schema, "mobile"),
     lastReconciled: readMappedDate(page, schema, "lastReconciled"),
     error: readMappedText(page, schema, "error"),
     policyIds: readMappedRelations(page, schema, "rbacPolicy"),
@@ -103,6 +104,7 @@ export async function upsertIamUser({
   email,
   department,
   role,
+  mobile = "",
   slackUserId = "",
   existingPageId = "",
   dryRun = false,
@@ -112,6 +114,7 @@ export async function upsertIamUser({
   warnIfFieldMissing(schema, "email", true);
 
   const normalizedEmail = email.trim().toLowerCase();
+  const normalizedMobile = String(mobile ?? "").trim();
   const slackId = String(slackUserId ?? "").trim();
   const pageId = String(existingPageId ?? "").trim();
   const users = await getAllUsers();
@@ -133,6 +136,7 @@ export async function upsertIamUser({
     ...buildPropertyWrite(schema, "email", normalizedEmail),
     ...buildPropertyWrite(schema, "department", department),
     ...buildPropertyWrite(schema, "role", role),
+    ...buildPropertyWrite(schema, "mobile", normalizedMobile),
     ...buildPropertyWrite(schema, "status", "Active", { optionAliases: USER_STATUS_ALIASES }),
     ...buildPropertyWrite(schema, "provisioningStatus", "Pending", {
       optionAliases: IAM_STATUS_ALIASES,
@@ -152,6 +156,7 @@ export async function upsertIamUser({
     email: normalizedEmail,
     department,
     role,
+    mobile: normalizedMobile || existing?.mobile || "",
     status: "Active",
     provisioningStatus: "Pending",
     slackUserId: slackUserId || existing?.slackUserId || "",

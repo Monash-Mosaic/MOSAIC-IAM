@@ -17,6 +17,7 @@ import {
   notionDate,
   notionEmail,
   notionNumber,
+  notionPhoneNumber,
   notionRelation,
   notionSelect,
   notionStatus,
@@ -24,6 +25,7 @@ import {
   notionTitle,
   notionUrl,
   pickClosestOption,
+  getPhoneNumber,
 } from "./helpers.js";
 
 export const NOTION_FIELDS = {
@@ -36,6 +38,7 @@ export const NOTION_FIELDS = {
     provisioningStatus: ["IAM Status", "Provisioning Status", "ProvisioningStatus"],
     slackUserId: ["Slack ID", "Slack User ID", "Slack User Id"],
     githubUsername: ["GitHub Username", "GitHub Login", "GitHub Handle"],
+    mobile: ["Mobile", "Mobile Number", "Phone", "Phone Number"],
     lastReconciled: ["Last IAM Sync", "Last Reconciled", "Last Reconciled At"],
     error: ["IAM Error", "Error"],
     preferredName: ["Preferred Name"],
@@ -190,6 +193,9 @@ export function readMappedText(page, schema, fieldKey) {
   if (property.type === "email") {
     return getEmail(property);
   }
+  if (property.type === "phone_number") {
+    return getPhoneNumber(property);
+  }
   if (property.type === "select" || property.type === "status") {
     return getSelect(property);
   }
@@ -236,6 +242,8 @@ export function buildPropertyWrite(schema, fieldKey, value, { optionAliases = {}
       return { [field.name]: notionText(value) };
     case "email":
       return { [field.name]: notionEmail(value) };
+    case "phone_number":
+      return { [field.name]: notionPhoneNumber(value) };
     case "select": {
       const option = pickClosestOption(value, field.options, optionAliases);
       return option ? { [field.name]: notionSelect(option) } : {};
