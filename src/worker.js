@@ -1,5 +1,9 @@
 import { applyWorkerBindings } from "./config/env.js";
-import { handleSlackEvents, handleSlackInteractions } from "./slack/http.js";
+import {
+  handleSlackCommands,
+  handleSlackEvents,
+  handleSlackInteractions,
+} from "./slack/http.js";
 import { logger } from "./utils/logger.js";
 
 function jsonResponse(status, body) {
@@ -34,6 +38,13 @@ export default {
           return jsonResponse(405, { error: "Method not allowed" });
         }
         return handleSlackInteractions(request, ctx);
+      }
+
+      if (url.pathname === "/slack/commands") {
+        if (request.method !== "POST") {
+          return jsonResponse(405, { error: "Method not allowed" });
+        }
+        return handleSlackCommands(request);
       }
 
       return jsonResponse(404, { error: "Not found" });

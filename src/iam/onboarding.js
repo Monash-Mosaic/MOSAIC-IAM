@@ -1,12 +1,19 @@
 import { logger } from "../utils/logger.js";
-import { upsertIamUser } from "../notion/users.js";
+import { findUserByEmail, findUserBySlackId, upsertIamUser } from "../notion/users.js";
 import { findSelectOption, getUserSelectOptions, listSelectLabels } from "../notion/userOptions.js";
 import { reconcileUser } from "./reconciler.js";
 import { buildOnboardingResultText } from "./accessSummary.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function validateOnboardingInput({ name, email, department, role }) {
+export async function validateOnboardingInput({
+  name,
+  email,
+  department,
+  role,
+  slackUserId,
+  existingPageId,
+}) {
   const errors = {};
   if (!String(name ?? "").trim()) {
     errors.name = "Please add your full name.";
@@ -27,11 +34,36 @@ export async function validateOnboardingInput({ name, email, department, role })
   } else if (!findSelectOption(options.roles, role)) {
     errors.role = `Please choose a role: ${listSelectLabels(options.roles)}.`;
   }
+
+  if (!errors.email) {
+    const [emailOwner, slackOwner] = await Promise.all([
+      findUserByEmail(normalizedEmail),
+      findUserBySlackId(slackUserId),
+    ]);
+    const selfPageId = String(existingPageId || slackOwner?.pageId || "").trim();
+    if (emailOwner && selfPageId && emailOwner.pageId !== selfPageId) {
+      errors.email = "That email is already used by another MOSAIC profile.";
+    }
+  }
   return errors;
 }
 
-export async function normalizeOnboardingInput({ name, email, department, role, slackUserId }) {
-  const errors = await validateOnboardingInput({ name, email, department, role });
+export async function normalizeOnboardingInput({
+  name,
+  email,
+  department,
+  role,
+  slackUserId,
+  existingPageId,
+}) {
+  const errors = await validateOnboardingInput({
+    name,
+    email,
+    department,
+    role,
+    slackUserId,
+    existingPageId,
+  });
   if (Object.keys(errors).length) {
     const error = new Error(Object.values(errors).join(" "));
     error.validationErrors = errors;
@@ -45,6 +77,7 @@ export async function normalizeOnboardingInput({ name, email, department, role, 
     department: findSelectOption(options.departments, department).value,
     role: findSelectOption(options.roles, role).value,
     slackUserId: slackUserId ? String(slackUserId).trim() : "",
+    existingPageId: existingPageId ? String(existingPageId).trim() : "",
   };
 }
 
@@ -69,7 +102,7 @@ export function buildOnboardingUserMessage(result) {
   return buildOnboardingResultText(result);
 }
 
-export async function onboardingService(input, { dryRun = false } = {}) {
+export async function onboardingService(input, { dryRun = false, intent = "onboarding" } = {}) {
   let parsed;
   try {
     parsed = await normalizeOnboardingInput(input);
@@ -81,6 +114,7 @@ export async function onboardingService(input, { dryRun = false } = {}) {
     return {
       outcome: "failed",
       saved: false,
+      intent,
       user: { ...input },
       reconcileResult: null,
       message: "Sorry, we couldn't save your onboarding just then. Please try again, or message the MOSAIC team.",
@@ -91,13 +125,17 @@ export async function onboardingService(input, { dryRun = false } = {}) {
   try {
     user = await upsertIamUser({ ...parsed, dryRun });
   } catch (error) {
+    if (error.validationErrors) {
+      throw error;
+    }
     logger.error("[ERROR]", `Failed to upsert IAM user ${parsed.email}: ${error.message}`);
     return {
       outcome: "failed",
       saved: false,
+      intent,
       user: { ...parsed },
       reconcileResult: null,
-      message: buildOnboardingUserMessage({ outcome: "failed", saved: false, user: parsed }),
+      message: buildOnboardingUserMessage({ outcome: "failed", saved: false, intent, user: parsed }),
     };
   }
 
@@ -107,6 +145,7 @@ export async function onboardingService(input, { dryRun = false } = {}) {
     const result = {
       outcome,
       saved: true,
+      intent,
       user,
       reconcileResult,
       dryRun,
@@ -118,6 +157,7 @@ export async function onboardingService(input, { dryRun = false } = {}) {
     const result = {
       outcome: "failed",
       saved: true,
+      intent,
       user,
       reconcileResult: null,
       dryRun,

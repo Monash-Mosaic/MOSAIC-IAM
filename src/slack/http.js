@@ -1,11 +1,17 @@
 import { getSlackHttpEnv } from "../config/env.js";
 import { logger } from "../utils/logger.js";
-import { SLACK_ACTION_IDS, SLACK_VIEW_CALLBACK_ID } from "./config.js";
+import {
+  SLACK_ACTION_IDS,
+  SLACK_COMMANDS,
+  SLACK_UPDATE_VIEW_CALLBACK_ID,
+  SLACK_VIEW_CALLBACK_ID,
+} from "./config.js";
 import {
   completeOnboarding,
   extractOnboardingSubmission,
   modalValidationErrors,
   openOnboardingModal,
+  openUpdateModal,
   sendWelcomeDm,
 } from "./handlers.js";
 import { SlackRequestError, readVerifiedSlackBody } from "./verify.js";
@@ -61,7 +67,20 @@ async function handleStartOnboarding(payload) {
   }
 }
 
-async function handleOnboardingSubmit(payload, ctx) {
+async function handleIamUpdateCommand(form) {
+  const client = createClient();
+  try {
+    await openUpdateModal(client, {
+      user_id: form.get("user_id"),
+      trigger_id: form.get("trigger_id"),
+      channel_id: form.get("channel_id"),
+    });
+  } catch (error) {
+    logger.error("[SLACK]", `Failed to open update modal: ${error.message}`);
+  }
+}
+
+async function handleDetailsSubmit(payload, ctx, intent) {
   const parsed = extractOnboardingSubmission(payload.view, payload.user?.id);
   const errors = await modalValidationErrors(parsed);
   if (errors) {
@@ -70,18 +89,22 @@ async function handleOnboardingSubmit(payload, ctx) {
 
   const client = createClient();
   const slackUserId = payload.user?.id;
+  const label = intent === "update" ? "Profile update" : "Onboarding";
   schedule(ctx, async () => {
     try {
-      await completeOnboarding(client, slackUserId, parsed);
+      await completeOnboarding(client, slackUserId, parsed, { intent });
     } catch (error) {
-      logger.error("[SLACK]", `Onboarding submission failed: ${error.message}`);
+      logger.error("[SLACK]", `${label} submission failed: ${error.message}`);
       try {
         await client.chat.postMessage({
           channel: slackUserId,
-          text: "Sorry — something went wrong while finishing onboarding. Please try again, or message the MOSAIC team if it keeps happening.",
+          text:
+            intent === "update"
+              ? "Sorry — something went wrong while saving your details. Please try `/iam-update` again, or message the MOSAIC team if it keeps happening."
+              : "Sorry — something went wrong while finishing onboarding. Please try again, or message the MOSAIC team if it keeps happening.",
         });
       } catch (dmError) {
-        logger.error("[SLACK]", `Failed to send onboarding failure DM: ${dmError.message}`);
+        logger.error("[SLACK]", `Failed to send ${label.toLowerCase()} failure DM: ${dmError.message}`);
       }
     }
   });
@@ -120,6 +143,23 @@ export async function handleSlackEvents(request, ctx) {
   }
 }
 
+export async function handleSlackCommands(request) {
+  try {
+    const { SLACK_SIGNING_SECRET } = getSlackHttpEnv();
+    const rawBody = await readVerifiedSlackBody(request, SLACK_SIGNING_SECRET);
+    const form = new URLSearchParams(rawBody);
+    const command = form.get("command");
+
+    if (command === SLACK_COMMANDS.iamUpdate) {
+      await handleIamUpdateCommand(form);
+    }
+
+    return emptyAck();
+  } catch (error) {
+    return slackErrorResponse(error);
+  }
+}
+
 export async function handleSlackInteractions(request, ctx) {
   try {
     const { SLACK_SIGNING_SECRET } = getSlackHttpEnv();
@@ -147,7 +187,11 @@ export async function handleSlackInteractions(request, ctx) {
     }
 
     if (payload?.type === "view_submission" && payload.view?.callback_id === SLACK_VIEW_CALLBACK_ID) {
-      return handleOnboardingSubmit(payload, ctx);
+      return handleDetailsSubmit(payload, ctx, "onboarding");
+    }
+
+    if (payload?.type === "view_submission" && payload.view?.callback_id === SLACK_UPDATE_VIEW_CALLBACK_ID) {
+      return handleDetailsSubmit(payload, ctx, "update");
     }
 
     return emptyAck();

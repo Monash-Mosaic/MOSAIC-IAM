@@ -26,5 +26,10 @@ export function createSlackWebClient(token) {
         return slackApi(token, "views.open", args);
       },
     },
+    users: {
+      info(args) {
+        return slackApi(token, "users.info", args);
+      },
+    },
   };
 }

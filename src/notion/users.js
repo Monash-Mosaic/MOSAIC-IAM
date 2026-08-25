@@ -83,6 +83,15 @@ export async function findUserByEmail(email) {
   return users.find((user) => user.email === normalized) ?? null;
 }
 
+export async function findUserBySlackId(slackUserId) {
+  const id = String(slackUserId ?? "").trim();
+  if (!id) {
+    return null;
+  }
+  const users = await getAllUsers();
+  return users.find((user) => user.slackUserId === id) ?? null;
+}
+
 export async function getUserByEmail(email) {
   const users = await getActiveUsers();
   const normalized = email.trim().toLowerCase();
@@ -95,6 +104,7 @@ export async function upsertIamUser({
   department,
   role,
   slackUserId = "",
+  existingPageId = "",
   dryRun = false,
 }) {
   const env = getEnv();
@@ -102,7 +112,22 @@ export async function upsertIamUser({
   warnIfFieldMissing(schema, "email", true);
 
   const normalizedEmail = email.trim().toLowerCase();
-  const existing = await findUserByEmail(normalizedEmail);
+  const slackId = String(slackUserId ?? "").trim();
+  const pageId = String(existingPageId ?? "").trim();
+  const users = await getAllUsers();
+  const emailOwner = users.find((user) => user.email === normalizedEmail) ?? null;
+  const existing =
+    (pageId && users.find((user) => user.pageId === pageId)) ||
+    (slackId && users.find((user) => user.slackUserId === slackId)) ||
+    emailOwner;
+
+  if (emailOwner && existing && emailOwner.pageId !== existing.pageId) {
+    const error = new Error("That email is already used by another MOSAIC profile.");
+    error.validationErrors = {
+      email: "That email is already used by another MOSAIC profile.",
+    };
+    throw error;
+  }
   const properties = {
     ...buildPropertyWrite(schema, "name", name),
     ...buildPropertyWrite(schema, "email", normalizedEmail),

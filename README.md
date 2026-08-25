@@ -1,6 +1,6 @@
 # MOSAIC-IAM
 
-IAM automation for MOSAIC. Notion is the source of truth. GitHub organisation access is provisioned by the existing GitHub App IAM engine. Slack is an onboarding interface only (Socket Mode; no public URL).
+IAM automation for MOSAIC. Notion is the source of truth. GitHub organisation access is provisioned by the existing GitHub App IAM engine. Slack is the onboarding and self-service profile interface.
 
 ## Setup
 
@@ -15,9 +15,10 @@ IAM automation for MOSAIC. Notion is the source of truth. GitHub organisation ac
 - Bot token scopes: `chat:write`, `im:write`, `users:read`, `users:read.email` (optional), `channels:read`, `groups:read`, `channels:write.invites`, `groups:write.invites`
 - App token (`xapp-`) scope: `connections:write`
 - Subscribe to bot event: `team_join`
-- Interactivity: enabled (Socket Mode delivers actions; no public webhook)
+- Interactivity: enabled (Socket Mode locally; production Worker uses Request URL `/slack/interactions`)
 - Interactivity action ID: `iam_start_onboarding`
-- Modal callback ID: `iam_onboarding_submit`
+- Modal callback IDs: `iam_onboarding_submit`, `iam_update_submit`
+- Slash command: `/iam-update` (Request URL `/slack/commands` on the Worker; Socket Mode delivers it locally)
 
 Department and Role dropdowns are loaded from the **IAM - Users** Notion select/status property options (not hardcoded, not inferred from existing rows). Options are cached in memory for 5 minutes.
 
@@ -41,7 +42,7 @@ Send the same welcome DM to an existing Slack user (does not start Socket Mode):
 npm run slack:test-dm -- --user U0123456789
 ```
 
-Keep `npm run slack` running in another terminal so **Start Onboarding** can open the modal.
+Keep `npm run slack` running in another terminal so **Start Onboarding** and `/iam-update` can open modals.
 
 How to test the Slack flow:
 
@@ -52,6 +53,7 @@ How to test the Slack flow:
 5. Confirm the **IAM - Users** record (Status `Active`, Slack User ID set).
 6. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**.
 7. Use the Notion invite buttons in the result DM (`Join Notion Workspace` plus any policy teamspace buttons). Those rows stay **Awaiting User Action** until later verification.
+8. Type `/iam-update` in Slack to reopen your details, confirm them, and save changes. Team or role updates re-run access provisioning.
 
 ## Google Drive OAuth (optional)
 

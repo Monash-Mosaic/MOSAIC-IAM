@@ -58,22 +58,31 @@ export function getNotionInviteActions(reconcileResult) {
 }
 
 export function buildOnboardingResultText(result) {
+  const isUpdate = result.intent === "update";
   if (result.outcome === "already_complete") {
-    return `You're all set, ${firstName(result.user)} — your MOSAIC access is already active. If something looks missing, just ping the team.`;
+    return isUpdate
+      ? `Thanks ${firstName(result.user)} — your details are saved and your MOSAIC access already matches.`
+      : `You're all set, ${firstName(result.user)} — your MOSAIC access is already active. If something looks missing, just ping the team.`;
   }
   if (result.outcome === "failed" && !result.saved) {
-    return "Sorry, we couldn't save your onboarding just then. Please try again, or message the MOSAIC team if it keeps happening.";
+    return isUpdate
+      ? "Sorry, we couldn't update your details just then. Please try again, or message the MOSAIC team if it keeps happening."
+      : "Sorry, we couldn't save your onboarding just then. Please try again, or message the MOSAIC team if it keeps happening.";
   }
   if (result.outcome === "failed" && result.saved) {
     return [
-      `Thanks ${firstName(result.user)}, we've saved your details.`,
+      isUpdate
+        ? `Thanks ${firstName(result.user)}, we've updated your details.`
+        : `Thanks ${firstName(result.user)}, we've saved your details.`,
       "Some access still needs a hand from the team — they'll follow up if anything is needed from you.",
     ].join("\n");
   }
 
   const lines = [
-    `Welcome aboard, ${firstName(result.user)}!`,
-    `You're joining as *${result.user.department} · ${result.user.role}*. Here's where things stand:`,
+    isUpdate
+      ? `Thanks ${firstName(result.user)}, your details are up to date.`
+      : `Welcome aboard, ${firstName(result.user)}!`,
+    `You're listed as *${result.user.department} · ${result.user.role}*. Here's where things stand:`,
     "",
     "*Your access*",
     ...buildAccessSummaryLines(result.reconcileResult),
@@ -98,9 +107,17 @@ export function buildOnboardingResultText(result) {
 export function buildOnboardingResultBlocks(result) {
   const summaryLines = buildAccessSummaryLines(result.reconcileResult);
   const notionActions = getNotionInviteActions(result.reconcileResult);
-  const greeting = result.outcome === "already_complete"
-    ? `*You're all set, ${firstName(result.user)}.*\nYour MOSAIC access is already active.`
-    : `*Welcome aboard, ${firstName(result.user)}!*\nYou're joining as *${result.user.department} · ${result.user.role}*. Here's where things stand:`;
+  const isUpdate = result.intent === "update";
+  let greeting;
+  if (result.outcome === "already_complete") {
+    greeting = isUpdate
+      ? `*Thanks ${firstName(result.user)} — you're all set.*\nYour details are saved and your MOSAIC access already matches.`
+      : `*You're all set, ${firstName(result.user)}.*\nYour MOSAIC access is already active.`;
+  } else if (isUpdate) {
+    greeting = `*Thanks ${firstName(result.user)}, your details are up to date.*\nYou're listed as *${result.user.department} · ${result.user.role}*. Here's where things stand:`;
+  } else {
+    greeting = `*Welcome aboard, ${firstName(result.user)}!*\nYou're joining as *${result.user.department} · ${result.user.role}*. Here's where things stand:`;
+  }
 
   const blocks = [
     {
