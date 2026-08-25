@@ -112,7 +112,10 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
   const skipped = resolved.filter((item) => item.status === "skipped");
   const teams = resolved.filter((item) => item.status === "resolved");
   const desiredTeamIds = uniqueTeamIds(teams.map((item) => item.team.id));
-  const knownLogin = trackingRecords.find((record) => record.githubLogin)?.githubLogin ?? null;
+  const knownLogin =
+    trackingRecords.find((record) => record.githubLogin)?.githubLogin ||
+    String(user.githubUsername ?? "").trim() ||
+    null;
 
   logger.info(
     "[IAM]",
@@ -130,7 +133,31 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
     };
   }
 
-  const pendingInvitation = await findPendingInvitationByEmail(user.email);
+  // Prefer verifying existing org membership before invitation APIs. Invite listing
+  // failures used to mark already-granted team access as failed.
+  const member = await findMemberByEmail(user.email, knownLogin);
+  if (member) {
+    logger.info("[GITHUB]", `Existing organisation membership found: ${member.login}`);
+    const membershipResults = await ensureTeamMemberships(member.login, teams, dryRun);
+    return {
+      provider: "GitHub",
+      invitationCreated: false,
+      mutated: membershipResults.some((item) => item.mutated),
+      githubLogin: member.login,
+      invitationId: null,
+      results: [...membershipResults, ...failed, ...skipped],
+    };
+  }
+
+  let pendingInvitation = null;
+  try {
+    pendingInvitation = await findPendingInvitationByEmail(user.email);
+  } catch (error) {
+    logger.warn(
+      "[GITHUB]",
+      `Could not list pending invitations for ${user.email}: ${error.message}`,
+    );
+  }
   if (pendingInvitation) {
     logger.info("[GITHUB]", `Existing pending invitation found: ${pendingInvitation.id}`);
     const invitationTeams = await getInvitationTeams(pendingInvitation.id);
@@ -199,21 +226,7 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
     };
   }
 
-  const member = await findMemberByEmail(user.email, knownLogin);
-  if (member) {
-    logger.info("[GITHUB]", `Existing organisation membership found: ${member.login}`);
-    const membershipResults = await ensureTeamMemberships(member.login, teams, dryRun);
-    return {
-      provider: "GitHub",
-      invitationCreated: false,
-      mutated: membershipResults.some((item) => item.mutated),
-      githubLogin: member.login,
-      invitationId: null,
-      results: [...membershipResults, ...failed, ...skipped],
-    };
-  }
-
-  logger.info("[GITHUB]", "Existing pending invitation not found");
+  logger.info("[GITHUB]", "Existing organisation membership and pending invitation not found");
   if (dryRun) {
     logger.info(
       "[GITHUB]",

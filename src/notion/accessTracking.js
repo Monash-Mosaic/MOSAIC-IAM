@@ -211,7 +211,7 @@ export async function upsertAccessTracking({
   if (!existing) {
     Object.assign(properties, buildPropertyWrite(schema, "requestedAt", now));
   }
-  if (normalizedStatus === "active") {
+  if (normalizedStatus === "active" || normalizedStatus === "granted") {
     Object.assign(properties, buildPropertyWrite(schema, "grantedAt", now));
   }
 

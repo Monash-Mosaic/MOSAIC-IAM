@@ -95,6 +95,18 @@ function classifyOutcome(reconcileResult) {
   ) {
     return "already_complete";
   }
+  const results = (reconcileResult.results ?? []).filter(
+    (result) => String(result.status).toLowerCase() !== "skipped",
+  );
+  if (
+    results.length &&
+    results.every((result) => {
+      const status = String(result.status).toLowerCase();
+      return status === "active" || status === "granted";
+    })
+  ) {
+    return "already_complete";
+  }
   return "pending";
 }
 

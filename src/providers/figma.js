@@ -66,21 +66,13 @@ function provisionInviteResource(resource) {
       mutated: false,
     };
   }
-  if (!resource.inviteUrl) {
-    logger.warn("[FIGMA]", `${resource.code} has no Invite URL configured`);
-    return {
-      resource,
-      status: "needs_configuration",
-      error: "Invite URL is not configured for this Figma resource.",
-      mutated: false,
-    };
-  }
+  // Figma membership is not API-verified. Record desired+actual as Granted.
   return {
     resource,
-    status: "awaiting_user_action",
+    status: "granted",
     error: "",
     mutated: false,
-    inviteUrl: resource.inviteUrl,
+    inviteUrl: resource.inviteUrl || "",
   };
 }
 
@@ -88,7 +80,10 @@ export async function reconcileFigmaAccess(user, resources, { dryRun = false } =
   const figmaResources = resources.filter(isFigmaResource);
   const results = figmaResources.map((resource) => {
     if (dryRun) {
-      logger.info("[FIGMA]", `DRY RUN would issue invite action for ${resource.code} to ${user.email}`);
+      logger.info(
+        "[FIGMA]",
+        `DRY RUN would mark ${resource.code} as granted for ${user.email} (invite links are not synced)`,
+      );
     }
     return provisionInviteResource(resource);
   });

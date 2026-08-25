@@ -40,9 +40,12 @@ function statusLabel(status) {
 }
 
 const INVITE_PROVIDERS = new Set(["notion", "figma"]);
+const SUCCESS_STATUSES = new Set(["active", "granted"]);
+const USER_JOIN_STATUSES = new Set(["awaiting_user_action"]);
 
 const WORKSPACE_CODES = new Set([
   "nt-workspace",
+  "nt-wk",
   "fg-wk",
   "fg-workspace",
 ]);
@@ -59,6 +62,31 @@ function isWorkspaceResource(resource) {
 
 function resourceDisplayName(resource) {
   return resource?.externalName || resource?.name || resource?.code || "resource";
+}
+
+function isSuccessStatus(status) {
+  return SUCCESS_STATUSES.has(String(status ?? "").toLowerCase());
+}
+
+function isSkippedStatus(status) {
+  return String(status ?? "").toLowerCase() === "skipped";
+}
+
+function needsUserJoin(status) {
+  return USER_JOIN_STATUSES.has(String(status ?? "").toLowerCase());
+}
+
+function actionableResults(reconcileResult) {
+  return (reconcileResult?.results ?? []).filter(
+    (result) => !isSkippedStatus(result.status) && !isSuccessStatus(result.status),
+  );
+}
+
+export function hasAllAccessGranted(reconcileResult) {
+  const results = (reconcileResult?.results ?? []).filter(
+    (result) => !isSkippedStatus(result.status),
+  );
+  return results.length > 0 && results.every((result) => isSuccessStatus(result.status));
 }
 
 function inviteButtonLabel(action) {
@@ -99,14 +127,19 @@ function chunk(items, size) {
 }
 
 export function buildAccessSummaryLines(reconcileResult) {
-  return (reconcileResult?.results ?? [])
-    .filter((result) => !isInviteLinkProvider(result.resource) && result.status !== "skipped")
+  return actionableResults(reconcileResult)
+    .filter((result) => !isInviteLinkProvider(result.resource))
     .map((result) => `• ${providerLabel(result.resource)} — ${statusLabel(result.status)}`);
 }
 
 export function getInviteActions(reconcileResult) {
   return (reconcileResult?.results ?? [])
-    .filter((result) => isInviteLinkProvider(result.resource) && result.status !== "skipped")
+    .filter(
+      (result) =>
+        isInviteLinkProvider(result.resource) &&
+        needsUserJoin(result.status) &&
+        !isSkippedStatus(result.status),
+    )
     .map((result) => {
       const resource = result.resource;
       const provider = providerKey(resource) === "figma" ? "figma" : "notion";
@@ -180,12 +213,17 @@ function buildInviteSectionLines(provider, actions) {
   };
 }
 
+function allAccessMessage(result) {
+  const isUpdate = result.intent === "update";
+  return isUpdate
+    ? `Thanks ${firstName(result.user)} — your details are updated and you have all necessary accesses.`
+    : `You're all set, ${firstName(result.user)} — you have all necessary MOSAIC accesses.`;
+}
+
 export function buildOnboardingResultText(result) {
   const isUpdate = result.intent === "update";
-  if (result.outcome === "already_complete") {
-    return isUpdate
-      ? `Thanks ${firstName(result.user)} — your details are saved and your MOSAIC access already matches.`
-      : `You're all set, ${firstName(result.user)} — your MOSAIC access is already active. If something looks missing, just ping the team.`;
+  if (result.outcome === "already_complete" || hasAllAccessGranted(result.reconcileResult)) {
+    return allAccessMessage(result);
   }
   if (result.outcome === "failed" && !result.saved) {
     return isUpdate
@@ -201,19 +239,26 @@ export function buildOnboardingResultText(result) {
     ].join("\n");
   }
 
+  const summaryLines = buildAccessSummaryLines(result.reconcileResult);
+  const inviteActions = getInviteActions(result.reconcileResult);
+  const notionActions = inviteActions.filter((action) => action.provider === "notion");
+  const figmaActions = inviteActions.filter((action) => action.provider === "figma");
+
+  if (!summaryLines.length && !inviteActions.length) {
+    return allAccessMessage(result);
+  }
+
   const lines = [
     isUpdate
       ? `Thanks ${firstName(result.user)}, your details are up to date.`
       : `Welcome aboard, ${firstName(result.user)}!`,
-    `You're listed as *${result.user.department} · ${result.user.role}*. Here's where things stand:`,
+    `You're listed as *${result.user.department} · ${result.user.role}*. Here's what still needs attention:`,
     "",
-    "*Your access*",
-    ...buildAccessSummaryLines(result.reconcileResult),
   ];
 
-  const inviteActions = getInviteActions(result.reconcileResult);
-  const notionActions = inviteActions.filter((action) => action.provider === "notion");
-  const figmaActions = inviteActions.filter((action) => action.provider === "figma");
+  if (summaryLines.length) {
+    lines.push("*Your access*", ...summaryLines);
+  }
 
   if (notionActions.length) {
     lines.push("", "*Notion*");
@@ -236,10 +281,7 @@ export function buildOnboardingResultText(result) {
     }
   }
 
-  lines.push(
-    "",
-    "That's everything for now. Check your email for GitHub, and use the Notion and Figma buttons if they appear below.",
-  );
+  lines.push("", "That's everything for now. Message the MOSAIC team if anything looks off.");
   return lines.join("\n");
 }
 
@@ -249,30 +291,41 @@ export function buildOnboardingResultBlocks(result) {
   const notionActions = inviteActions.filter((action) => action.provider === "notion");
   const figmaActions = inviteActions.filter((action) => action.provider === "figma");
   const isUpdate = result.intent === "update";
-  let greeting;
-  if (result.outcome === "already_complete") {
-    greeting = isUpdate
-      ? `*Thanks ${firstName(result.user)} — you're all set.*\nYour details are saved and your MOSAIC access already matches.`
-      : `*You're all set, ${firstName(result.user)}.*\nYour MOSAIC access is already active.`;
-  } else if (isUpdate) {
-    greeting = `*Thanks ${firstName(result.user)}, your details are up to date.*\nYou're listed as *${result.user.department} · ${result.user.role}*. Here's where things stand:`;
-  } else {
-    greeting = `*Welcome aboard, ${firstName(result.user)}!*\nYou're joining as *${result.user.department} · ${result.user.role}*. Here's where things stand:`;
+  const allGranted =
+    result.outcome === "already_complete" || hasAllAccessGranted(result.reconcileResult);
+
+  if (allGranted || (!summaryLines.length && !inviteActions.length)) {
+    return [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*${allAccessMessage(result)}*`,
+        },
+      },
+    ];
   }
+
+  const greeting = isUpdate
+    ? `*Thanks ${firstName(result.user)}, your details are up to date.*\nYou're listed as *${result.user.department} · ${result.user.role}*. Here's what still needs attention:`
+    : `*Welcome aboard, ${firstName(result.user)}!*\nYou're joining as *${result.user.department} · ${result.user.role}*. Here's what still needs attention:`;
 
   const blocks = [
     {
       type: "section",
       text: { type: "mrkdwn", text: greeting },
     },
-    {
+  ];
+
+  if (summaryLines.length) {
+    blocks.push({
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*Your access*\n${summaryLines.join("\n") || "• You're all caught up here"}`,
+        text: `*Your access*\n${summaryLines.join("\n")}`,
       },
-    },
-  ];
+    });
+  }
 
   for (const section of [
     buildInviteSectionLines("notion", notionActions),

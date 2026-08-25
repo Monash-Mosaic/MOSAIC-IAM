@@ -52,8 +52,8 @@ How to test the Slack flow:
 4. Complete the modal (Full Name, Email, Department, Role). Department/Role come from Notion. Email is the identity used for provisioning; GitHub username is not collected.
 5. Confirm the **IAM - Users** record (Status `Active`, Slack User ID set).
 6. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**.
-7. Use the Notion and Figma invite buttons in the result DM (`Join MOSAIC Notion Workspace`, `Join MOSAIC Figma`, plus any teamspace buttons). Those rows stay **Awaiting User Action** until later verification.
-8. Type `/iam-update` in Slack to reopen your details, confirm them, and save changes. Team or role updates re-run access provisioning.
+7. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**. Notion and Figma rows are recorded as **Granted** / **Synced** (membership is not API-verified).
+8. Type `/iam-update` in Slack to reopen your details, confirm them, and save changes. Team or role updates re-run access provisioning. If every access is already granted, the bot replies that details are updated and you have all necessary accesses.
 
 ## Google Drive OAuth (optional)
 
@@ -79,19 +79,19 @@ Map those IDs into **IAM - Access Resources** (`Provider: GoogleDrive`, `Resourc
 
 ## Notion invite links
 
-Notion Plus has no SCIM in this engine. Workspace membership is a user-action invite:
+Notion Plus has no SCIM in this engine. Workspace/teamspace membership is **not API-synced**.
 
-- Set `NOTION_WORKSPACE_INVITE_URL` for every onboarded user (`NT-WORKSPACE`), or put the URL on the `NT-WORKSPACE` Access Resource.
-- Teamspace invite URLs belong on **IAM - Access Resources** (`Invite URL`), for example `NT-EN`. Slack buttons are generated from resolved RBAC resources, not hardcoded department maps.
-- Button labels include the product name, for example `Join MOSAIC Notion Workspace` and `Join Operations Notion Teamspace`.
+- Desired State and Actual State are recorded as **Granted**, and Sync Status as **Synced**.
+- Optional invite URLs (`NOTION_WORKSPACE_INVITE_URL` or Access Resource `Invite URL`) can still be stored for humans, but Slack does not send Notion join buttons once access is treated as granted.
+- Example workspace resource code: `NT-WK` / `NT-WORKSPACE`.
 
 ## Figma invite links
 
-Figma workspace access is the same pattern as Notion (invite link, no API provisioning):
+Same pattern as Notion (no API membership verification):
 
-- Add **IAM - Access Resources** row `FG-WK` (`Provider: Figma`, `Resource Type: Workspace`, `Invite URL`).
-- Or set `FIGMA_INVITE_URL` as a fallback when the resource has no Invite URL.
-- Onboarding DMs include a `Join MOSAIC Figma` button whenever the workspace invite is available.
+- Add **IAM - Access Resources** row `FG-WK` (`Provider: Figma`, `Resource Type: Workspace`).
+- Or set `FIGMA_INVITE_URL` as a fallback Invite URL on the resource.
+- IAM records Figma as **Granted** / **Synced** without verifying join state, and does not DM join buttons for granted Figma access.
 
 ## Demo onboarding (no Slack)
 
