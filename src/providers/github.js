@@ -11,6 +11,10 @@ import {
 } from "../github/invitations.js";
 import { findMemberByEmail } from "../github/members.js";
 import { addTeamMember, isTeamMember, resolveTeam } from "../github/teams.js";
+import {
+  findTrackingRecordForResource,
+  isGrantedTrackingStatus,
+} from "../notion/accessTracking.js";
 
 function uniqueTeamIds(ids) {
   return [...new Set(ids.map(Number).filter(Boolean))];
@@ -19,6 +23,18 @@ function uniqueTeamIds(ids) {
 function hasAllDesiredTeams(attachedIds, desiredIds) {
   const attached = new Set(attachedIds.map(Number));
   return desiredIds.every((id) => attached.has(Number(id)));
+}
+
+function resolveKnownGithubLogin(user, trackingRecords, resources = []) {
+  for (const resource of resources) {
+    const record = findTrackingRecordForResource(trackingRecords, resource);
+    const login = String(record?.githubLogin ?? "").trim();
+    if (login) {
+      return login;
+    }
+  }
+  const fromAnyTracking = trackingRecords.find((record) => record.githubLogin)?.githubLogin;
+  return String(fromAnyTracking || user?.githubUsername || "").trim() || null;
 }
 
 async function resolveGitHubTeams(resources) {
@@ -112,15 +128,19 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
   const skipped = resolved.filter((item) => item.status === "skipped");
   const teams = resolved.filter((item) => item.status === "resolved");
   const desiredTeamIds = uniqueTeamIds(teams.map((item) => item.team.id));
-  const knownLogin =
-    trackingRecords.find((record) => record.githubLogin)?.githubLogin ||
-    String(user.githubUsername ?? "").trim() ||
-    null;
+  const knownLogin = resolveKnownGithubLogin(
+    user,
+    trackingRecords,
+    teams.map((item) => item.resource),
+  );
 
   logger.info(
     "[IAM]",
     `Resource resolved: ${githubResources.map((resource) => resource.code).join(", ")}`,
   );
+  if (knownLogin) {
+    logger.info("[GITHUB]", `Resolved GitHub login from Access Tracking / user profile: ${knownLogin}`);
+  }
 
   if (!teams.length) {
     return {
@@ -135,6 +155,7 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
 
   // Prefer verifying existing org membership before invitation APIs. Invite listing
   // failures used to mark already-granted team access as failed.
+  // Login comes from Access Tracking rows linked to the IAM user (via Slack ID → Users).
   const member = await findMemberByEmail(user.email, knownLogin);
   if (member) {
     logger.info("[GITHUB]", `Existing organisation membership found: ${member.login}`);
@@ -146,6 +167,36 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
       githubLogin: member.login,
       invitationId: null,
       results: [...membershipResults, ...failed, ...skipped],
+    };
+  }
+
+  // Tracking already says Granted for every desired team and we have a login, but
+  // org membership lookup failed (private email). Trust tracking as active.
+  const trackingGrantedAll = teams.every((item) => {
+    const record = findTrackingRecordForResource(trackingRecords, item.resource);
+    return record && isGrantedTrackingStatus(record.status);
+  });
+  if (knownLogin && trackingGrantedAll) {
+    logger.info(
+      "[GITHUB]",
+      `Access Tracking already grants all desired teams for ${knownLogin}; recording as active`,
+    );
+    return {
+      provider: "GitHub",
+      invitationCreated: false,
+      mutated: false,
+      githubLogin: knownLogin,
+      invitationId: null,
+      results: [
+        ...teams.map((item) => ({
+          ...item,
+          status: "active",
+          githubLogin: knownLogin,
+          mutated: false,
+        })),
+        ...failed,
+        ...skipped,
+      ],
     };
   }
 

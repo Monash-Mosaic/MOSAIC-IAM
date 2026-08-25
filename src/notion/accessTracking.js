@@ -105,6 +105,43 @@ function recordCodeHint(record) {
   return String(record?.resourceCodeHint ?? "");
 }
 
+function normalizePageId(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "");
+}
+
+function recordLinkedToUserPage(record, userPageId) {
+  const target = normalizePageId(userPageId);
+  if (!target) {
+    return false;
+  }
+  return (record.userIds ?? []).some((id) => normalizePageId(id) === target);
+}
+
+export function isGrantedTrackingStatus(status) {
+  const normalized = String(status ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "granted" || normalized === "active";
+}
+
+export function findTrackingRecordForResource(records, resource) {
+  const code = String(resource?.code ?? "").trim().toLowerCase();
+  const pageId = resource?.pageId;
+  return (
+    records.find((record) => pageId && record.resourceIds?.includes(pageId)) ??
+    records.find((record) => code && recordCodeHint(record).toLowerCase() === code) ??
+    records.find((record) => code && recordName(record).toLowerCase().includes(code)) ??
+    null
+  );
+}
+
+/**
+ * Access Tracking is keyed by the Users relation. Prefer pageId matches
+ * (resolved via Slack ID on the Users table). Email/title matching is fallback only.
+ */
 export async function getTrackingRecordsForUser(userOrEmail) {
   const records = await getAllTrackingRecords();
   if (typeof userOrEmail === "string") {
@@ -113,23 +150,30 @@ export async function getTrackingRecordsForUser(userOrEmail) {
       (record) => record.email === email || recordName(record).toLowerCase().includes(email),
     );
   }
-  const email = userOrEmail.email?.trim().toLowerCase() ?? "";
+
+  const pageId = userOrEmail?.pageId;
+  if (pageId) {
+    const byRelation = records.filter((record) => recordLinkedToUserPage(record, pageId));
+    if (byRelation.length) {
+      return byRelation;
+    }
+  }
+
+  const email = userOrEmail?.email?.trim().toLowerCase() ?? "";
+  if (!email) {
+    return [];
+  }
   return records.filter(
-    (record) =>
-      record.userIds?.includes(userOrEmail.pageId) ||
-      (email && (record.email === email || recordName(record).toLowerCase().includes(email))),
+    (record) => record.email === email || recordName(record).toLowerCase().includes(email),
   );
 }
 
 export async function findTrackingRecord(user, resourceCode, resourcePageId) {
   const records = await getTrackingRecordsForUser(user);
-  const code = String(resourceCode ?? "").trim().toLowerCase();
-  return (
-    records.find((record) => resourcePageId && record.resourceIds?.includes(resourcePageId)) ??
-    records.find((record) => recordCodeHint(record).toLowerCase() === code) ??
-    records.find((record) => recordName(record).toLowerCase().includes(code)) ??
-    null
-  );
+  return findTrackingRecordForResource(records, {
+    code: resourceCode,
+    pageId: resourcePageId,
+  });
 }
 
 export async function findTrackingRecordByGithubLogin(githubLogin, resourceCode, resourcePageId) {

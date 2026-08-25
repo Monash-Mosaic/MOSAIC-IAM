@@ -93,6 +93,22 @@ Same pattern as Notion (no API membership verification):
 - Or set `FIGMA_INVITE_URL` as a fallback Invite URL on the resource.
 - IAM records Figma as **Granted** / **Synced** without verifying join state, and does not DM join buttons for granted Figma access.
 
+## Inspect access by Slack ID (dry-run)
+
+Resolve a member by Slack ID, list Access Tracking rows linked via the **Users** relation, and compare them to RBAC desired access. No writes.
+
+```bash
+npm run inspect:access -- --slack-id U0123456789
+```
+
+Also print what a reconcile dry-run would do:
+
+```bash
+npm run inspect:access -- --slack-id U0123456789 --reconcile
+```
+
+Identity path: Slack ID → **Members** (Slack ID field) → Access Tracking (**Users** relation). GitHub login is read from tracking `External Username` when present.
+
 ## Demo onboarding (no Slack)
 
 This uses the same onboarding service as the Slack modal:

@@ -55,6 +55,10 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
   );
   const trackingRecords = await getTrackingRecordsForUser(user);
   const now = new Date().toISOString();
+  logger.info(
+    "[IAM]",
+    `Access Tracking via Users relation: ${trackingRecords.length} row(s) for Slack ${user.slackUserId || "(none)"} / ${user.email}`,
+  );
 
   if (!policies.length) {
     const status = "failed";
