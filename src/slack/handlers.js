@@ -188,11 +188,28 @@ export async function completeOnboarding(client, slackUserId, input, { intent = 
     },
     { intent },
   );
-  await client.chat.postMessage({
-    channel: slackUserId,
-    text: result.message,
-    blocks: result.outcome === "failed" ? undefined : buildOnboardingResultBlocks(result),
-  });
+  const text = result.message;
+  const blocks = result.outcome === "failed" ? undefined : buildOnboardingResultBlocks(result);
+  try {
+    await client.chat.postMessage({
+      channel: slackUserId,
+      text,
+      blocks,
+    });
+  } catch (error) {
+    if (blocks) {
+      logger.warn(
+        "[SLACK]",
+        `Block Kit onboarding DM failed (${error.message}); sending text-only fallback`,
+      );
+      await client.chat.postMessage({
+        channel: slackUserId,
+        text,
+      });
+    } else {
+      throw error;
+    }
+  }
   logger.info("[SLACK]", `${intent === "update" ? "Profile update" : "Onboarding"} ${result.outcome} for Slack user ${slackUserId}`);
   return result;
 }

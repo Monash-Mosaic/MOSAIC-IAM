@@ -1,10 +1,11 @@
 import { getEnforcementMode } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 import {
+  findTrackingRecordForResource,
   getTrackingRecordsForUser,
   upsertAccessTracking,
 } from "../notion/accessTracking.js";
-import { updateUserProvisioningStatus } from "../notion/users.js";
+import { updateUserGithubUsername, updateUserProvisioningStatus } from "../notion/users.js";
 import { getProvider } from "../providers/index.js";
 import { FIGMA_WORKSPACE_CODE_ALIASES, getFigmaWorkspaceResource } from "../providers/figma.js";
 import { getNotionWorkspaceResource } from "../providers/notion.js";
@@ -27,6 +28,68 @@ function findPolicyForResource(policies, resource) {
     policies[0] ??
     null
   );
+}
+
+function mergeTrackingRecord(trackingRecords, resource, patch) {
+  const existing = findTrackingRecordForResource(trackingRecords, resource);
+  if (existing) {
+    Object.assign(existing, patch);
+    return existing;
+  }
+  trackingRecords.push({
+    pageId: patch.pageId || "",
+    name: patch.name || "",
+    userIds: patch.userIds || [],
+    email: patch.email || "",
+    resourceIds: resource.pageId ? [resource.pageId] : [],
+    resourceCodeHint: resource.code || "",
+    ...patch,
+  });
+  return trackingRecords[trackingRecords.length - 1];
+}
+
+function createAccessTrackingSync({
+  user,
+  policies,
+  trackingRecords,
+  dryRun,
+  onGithubLogin,
+}) {
+  return async function syncAccessTracking(update) {
+    const { resource, status, invitationId, githubLogin, error } = update;
+    if (!resource) {
+      return;
+    }
+
+    const login = String(githubLogin ?? "").trim();
+    if (login) {
+      await onGithubLogin(login);
+    }
+
+    const record = await upsertAccessTracking({
+      user,
+      policy: findPolicyForResource(policies, resource),
+      resource,
+      status: status === "skipped" ? "failed" : status,
+      invitationId: invitationId ?? null,
+      githubLogin: login,
+      error: error || "",
+      source: "Provisioned",
+      action: "Grant",
+      dryRun,
+    });
+
+    mergeTrackingRecord(trackingRecords, resource, {
+      pageId: record?.pageId || "",
+      name: record?.name || "",
+      userIds: user?.pageId ? [user.pageId] : [],
+      email: user?.email || "",
+      status,
+      invitationId: invitationId ?? null,
+      githubLogin: login || record?.githubLogin || null,
+      error: error || "",
+    });
+  };
 }
 
 export async function reconcileUser(user, { dryRun = false } = {}) {
@@ -83,6 +146,30 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
   let invitationCreated = false;
   let mutated = false;
   let githubLogin = trackingRecords.find((record) => record.githubLogin)?.githubLogin ?? null;
+  let githubUsernameUpdated = false;
+
+  async function persistGithubLogin(login) {
+    const normalized = String(login ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+    githubLogin = normalized;
+    if (githubUsernameUpdated || user.githubUsername === normalized) {
+      githubUsernameUpdated = true;
+      return;
+    }
+    const updated = await updateUserGithubUsername(user, normalized, { dryRun });
+    user.githubUsername = updated.githubUsername;
+    githubUsernameUpdated = true;
+  }
+
+  const syncAccessTracking = createAccessTrackingSync({
+    user,
+    policies,
+    trackingRecords,
+    dryRun,
+    onGithubLogin: persistGithubLogin,
+  });
 
   for (const [providerName, providerResources] of grouped.entries()) {
     const provider = getProvider(providerName);
@@ -104,6 +191,8 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
       outcome = await provider.reconcile(user, providerResources, {
         trackingRecords,
         dryRun,
+        policies,
+        syncAccessTracking,
       });
     } catch (error) {
       const detail = error?.message || "Access could not be updated.";
@@ -121,13 +210,15 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
     }
     invitationCreated = invitationCreated || Boolean(outcome.invitationCreated);
     mutated = mutated || Boolean(outcome.mutated);
-    githubLogin = outcome.githubLogin || githubLogin;
+    if (outcome.githubLogin) {
+      await persistGithubLogin(outcome.githubLogin);
+    }
     allResults.push(...outcome.results);
   }
 
   for (const result of allResults) {
     const resource = result.resource;
-    if (!resource) {
+    if (!resource || result.trackingSynced) {
       continue;
     }
     await upsertAccessTracking({
@@ -142,6 +233,9 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
       action: "Grant",
       dryRun,
     });
+    if (result.githubLogin || githubLogin) {
+      await persistGithubLogin(result.githubLogin || githubLogin);
+    }
     mutated = mutated || Boolean(result.mutated);
   }
 

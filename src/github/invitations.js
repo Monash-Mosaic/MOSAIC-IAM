@@ -1,6 +1,9 @@
 import { getEnv } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 import { getGitHubClient } from "./client.js";
+import { githubErrorText, isAlreadyInvitedError, isAlreadyMemberError } from "./errors.js";
+
+export { githubErrorText, isAlreadyInvitedError, isAlreadyMemberError };
 
 export async function listPendingInvitations() {
   const env = getEnv();
@@ -58,18 +61,6 @@ export async function cancelOrgInvitation(invitationId) {
 
 export function formatGitHubError(error, email) {
   const status = error.status ?? "unknown";
-  const message = error.response?.data?.message || error.message;
+  const message = githubErrorText(error) || error.message;
   return `GitHub invitation failed for ${email}: ${status} ${message}`;
-}
-
-export function isAlreadyMemberError(error) {
-  const message = String(error.response?.data?.message || error.message || "").toLowerCase();
-  return error.status === 422 && message.includes("already a") && message.includes("member");
-}
-
-export function isAlreadyInvitedError(error) {
-  const message = String(error.response?.data?.message || error.message || "").toLowerCase();
-  return (
-    error.status === 422 && (message.includes("already invited") || message.includes("pending"))
-  );
 }

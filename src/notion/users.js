@@ -300,6 +300,36 @@ export async function upsertImportedIamUser({
   return { ...mapped, pageId: created.id, created: true, updated: false };
 }
 
+export async function updateUserGithubUsername(user, githubUsername, { dryRun = false } = {}) {
+  const login = String(githubUsername ?? "").trim();
+  if (!login || !user?.pageId || user.pageId === "dry-run") {
+    return user;
+  }
+  if (String(user.githubUsername ?? "").trim() === login) {
+    return user;
+  }
+
+  const schema = await getDataSourceSchema("users");
+  const properties = buildPropertyWrite(schema, "githubUsername", login);
+  if (!Object.keys(properties).length) {
+    logger.warn("[NOTION]", `No writable GitHub Username field found for ${user.email}`);
+    return user;
+  }
+
+  if (dryRun) {
+    logger.info("[NOTION]", `DRY RUN would set GitHub Username for ${user.email} to ${login}`);
+    return { ...user, githubUsername: login };
+  }
+
+  const notion = getNotionClient();
+  await notion.pages.update({
+    page_id: user.pageId,
+    properties,
+  });
+  logger.info("[NOTION]", `Updated GitHub Username for ${user.email} to ${login}`);
+  return { ...user, githubUsername: login };
+}
+
 export async function updateUserProvisioningStatus(
   user,
   { provisioningStatus, lastReconciled, error, dryRun = false },

@@ -1,8 +1,17 @@
 import { encodeInviteActionValue } from "./inviteLinks.js";
 
-function firstName(user) {
+function slackCode(text) {
+  const value = String(text ?? "").trim() || "—";
+  return `\`${value.replace(/`/g, "'")}\``;
+}
+
+function displayFirstName(user) {
   const name = String(user?.name ?? "").trim();
   return name.split(/\s+/)[0] || "there";
+}
+
+function firstName(user) {
+  return displayFirstName(user);
 }
 
 function normalize(value) {
@@ -194,7 +203,7 @@ function buildInviteSectionLines(provider, actions) {
   }
   for (const action of others) {
     lines.push(
-      `${step}. Join *${action.name}*${provider === "notion" ? " Notion teamspace" : ""}`,
+      `${step}. Join ${slackCode(action.name)}${provider === "notion" ? " Notion teamspace" : ""}`,
     );
     step += 1;
   }
@@ -224,8 +233,8 @@ function buildInviteSectionLines(provider, actions) {
 function allAccessMessage(result) {
   const isUpdate = result.intent === "update";
   return isUpdate
-    ? `Thanks ${firstName(result.user)} — your details are updated and you have all necessary accesses.`
-    : `You're all set, ${firstName(result.user)} — you have all necessary MOSAIC accesses.`;
+    ? `Thanks ${displayFirstName(result.user)} — your details are updated and you have all necessary accesses.`
+    : `You're all set, ${displayFirstName(result.user)} — you have all necessary MOSAIC accesses.`;
 }
 
 export function buildOnboardingResultText(result) {
@@ -315,8 +324,8 @@ export function buildOnboardingResultBlocks(result) {
   }
 
   const greeting = isUpdate
-    ? `*Thanks ${firstName(result.user)}, your details are up to date.*\nYou're listed as *${result.user.department} · ${result.user.role}*. Here's what still needs attention:`
-    : `*Welcome aboard, ${firstName(result.user)}!*\nYou're joining as *${result.user.department} · ${result.user.role}*. Here's what still needs attention:`;
+    ? `*Thanks ${slackCode(displayFirstName(result.user))}, your details are up to date.*\nYou're listed as *${slackCode(result.user.department)} · ${slackCode(result.user.role)}*. Here's what still needs attention:`
+    : `*Welcome aboard, ${slackCode(displayFirstName(result.user))}!*\nYou're joining as *${slackCode(result.user.department)} · ${slackCode(result.user.role)}*. Here's what still needs attention:`;
 
   const blocks = [
     {

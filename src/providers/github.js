@@ -9,7 +9,7 @@ import {
   isAlreadyInvitedError,
   isAlreadyMemberError,
 } from "../github/invitations.js";
-import { findMemberByEmail } from "../github/members.js";
+import { findMemberByEmail, findProbableMemberForUser } from "../github/members.js";
 import { addTeamMember, isTeamMember, resolveTeam } from "../github/teams.js";
 import {
   findTrackingRecordForResource,
@@ -116,7 +116,43 @@ async function ensureTeamMemberships(username, resolvedTeams, dryRun) {
   return results;
 }
 
-export async function reconcileGitHubAccess({ user, resources, trackingRecords, dryRun = false }) {
+async function syncTeamResults(syncAccessTracking, items, fields) {
+  if (!syncAccessTracking) {
+    return;
+  }
+  for (const item of items) {
+    if (!item.resource) {
+      continue;
+    }
+    await syncAccessTracking({
+      resource: item.resource,
+      status: fields.status ?? item.status,
+      invitationId: fields.invitationId ?? item.invitationId ?? null,
+      githubLogin: fields.githubLogin ?? item.githubLogin ?? null,
+      error: fields.error ?? item.error ?? "",
+    });
+  }
+}
+
+function markSynced(results) {
+  return results.map((item) => ({ ...item, trackingSynced: true }));
+}
+
+async function resolveExistingMember(user, knownLogin, teamSlugs) {
+  const direct = await findMemberByEmail(user.email, knownLogin, { teamSlugs });
+  if (direct) {
+    return direct;
+  }
+  return findProbableMemberForUser(user, teamSlugs);
+}
+
+export async function reconcileGitHubAccess({
+  user,
+  resources,
+  trackingRecords,
+  dryRun = false,
+  syncAccessTracking = null,
+}) {
   const githubResources = resources.filter(
     (resource) =>
       String(resource.provider ?? "").trim().toLowerCase() === "github" &&
@@ -139,6 +175,7 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
   const skipped = resolved.filter((item) => item.status === "skipped");
   const teams = resolved.filter((item) => item.status === "resolved");
   const desiredTeamIds = uniqueTeamIds(teams.map((item) => item.team.id));
+  const teamSlugs = teams.map((item) => item.team.slug);
   const knownLogin = resolveKnownGithubLogin(
     user,
     trackingRecords,
@@ -167,17 +204,22 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
   // Prefer verifying existing org membership before invitation APIs. Invite listing
   // failures used to mark already-granted team access as failed.
   // Login comes from Access Tracking rows linked to the IAM user (via Slack ID → Users).
-  const member = await findMemberByEmail(user.email, knownLogin);
+  const member = await resolveExistingMember(user, knownLogin, teamSlugs);
   if (member) {
     logger.info("[GITHUB]", `Existing organisation membership found: ${member.login}`);
     const membershipResults = await ensureTeamMemberships(member.login, teams, dryRun);
+    await syncTeamResults(syncAccessTracking, membershipResults, {
+      status: "active",
+      githubLogin: member.login,
+      error: "",
+    });
     return {
       provider: "GitHub",
       invitationCreated: false,
       mutated: membershipResults.some((item) => item.mutated),
       githubLogin: member.login,
       invitationId: null,
-      results: [...membershipResults, ...failed, ...skipped],
+      results: markSynced([...membershipResults, ...failed, ...skipped]),
     };
   }
 
@@ -192,22 +234,28 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
       "[GITHUB]",
       `Access Tracking already grants all desired teams for ${knownLogin}; recording as active`,
     );
+    const trackedResults = [
+      ...teams.map((item) => ({
+        ...item,
+        status: "active",
+        githubLogin: knownLogin,
+        mutated: false,
+      })),
+      ...failed,
+      ...skipped,
+    ];
+    await syncTeamResults(syncAccessTracking, teams, {
+      status: "active",
+      githubLogin: knownLogin,
+      error: "",
+    });
     return {
       provider: "GitHub",
       invitationCreated: false,
       mutated: false,
       githubLogin: knownLogin,
       invitationId: null,
-      results: [
-        ...teams.map((item) => ({
-          ...item,
-          status: "active",
-          githubLogin: knownLogin,
-          mutated: false,
-        })),
-        ...failed,
-        ...skipped,
-      ],
+      results: markSynced(trackedResults),
     };
   }
 
@@ -228,23 +276,30 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
 
     if (hasAllDesiredTeams(attachedIds, desiredTeamIds)) {
       logger.info("[GITHUB]", "Pending invitation already contains all desired teams");
+      const pendingResults = [
+        ...teams.map((item) => ({
+          ...item,
+          status: "pending",
+          invitationId: pendingInvitation.id,
+          githubLogin,
+          mutated: false,
+        })),
+        ...failed,
+        ...skipped,
+      ];
+      await syncTeamResults(syncAccessTracking, teams, {
+        status: "pending",
+        invitationId: pendingInvitation.id,
+        githubLogin,
+        error: "",
+      });
       return {
         provider: "GitHub",
         invitationCreated: false,
         mutated: false,
         githubLogin,
         invitationId: pendingInvitation.id,
-        results: [
-          ...teams.map((item) => ({
-            ...item,
-            status: "pending",
-            invitationId: pendingInvitation.id,
-            githubLogin,
-            mutated: false,
-          })),
-          ...failed,
-          ...skipped,
-        ],
+        results: markSynced(pendingResults),
       };
     }
 
@@ -264,27 +319,39 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
     }
 
     await cancelOrgInvitation(pendingInvitation.id);
+    await syncTeamResults(syncAccessTracking, teams, {
+      status: "pending",
+      githubLogin,
+      error: "",
+    });
     const invitation = await createOrgInvitation({
       email: user.email,
       teamIds: desiredTeamIds,
+    });
+    const refreshedLogin = invitation.login || githubLogin;
+    await syncTeamResults(syncAccessTracking, teams, {
+      status: "pending",
+      invitationId: invitation.id,
+      githubLogin: refreshedLogin,
+      error: "",
     });
     return {
       provider: "GitHub",
       invitationCreated: true,
       mutated: true,
-      githubLogin: invitation.login || githubLogin,
+      githubLogin: refreshedLogin,
       invitationId: invitation.id,
-      results: [
+      results: markSynced([
         ...teams.map((item) => ({
           ...item,
           status: "pending",
           invitationId: invitation.id,
-          githubLogin: invitation.login || githubLogin,
+          githubLogin: refreshedLogin,
           mutated: true,
         })),
         ...failed,
         ...skipped,
-      ],
+      ]),
     };
   }
 
@@ -309,84 +376,113 @@ export async function reconcileGitHubAccess({ user, resources, trackingRecords, 
   }
 
   try {
+    await syncTeamResults(syncAccessTracking, teams, {
+      status: "pending",
+      githubLogin: knownLogin,
+      error: "",
+    });
     const invitation = await createOrgInvitation({
       email: user.email,
       teamIds: desiredTeamIds,
     });
+    const refreshedLogin = invitation.login || knownLogin;
     logger.info(
       "[GITHUB]",
       "The invited email must be verified on the recipient's GitHub account.",
     );
+    await syncTeamResults(syncAccessTracking, teams, {
+      status: "pending",
+      invitationId: invitation.id,
+      githubLogin: refreshedLogin,
+      error: "",
+    });
     return {
       provider: "GitHub",
       invitationCreated: true,
       mutated: true,
-      githubLogin: invitation.login || knownLogin,
+      githubLogin: refreshedLogin,
       invitationId: invitation.id,
-      results: [
+      results: markSynced([
         ...teams.map((item) => ({
           ...item,
           status: "pending",
           invitationId: invitation.id,
-          githubLogin: invitation.login || knownLogin,
+          githubLogin: refreshedLogin,
           mutated: true,
         })),
         ...failed,
         ...skipped,
-      ],
+      ]),
     };
   } catch (error) {
     if (isAlreadyInvitedError(error)) {
       const existing = await findPendingInvitationByEmail(user.email);
       logger.warn("[GITHUB]", `Invitation already exists for ${user.email}`);
+      const pendingResults = [
+        ...teams.map((item) => ({
+          ...item,
+          status: "pending",
+          invitationId: existing?.id ?? null,
+          githubLogin: existing?.login || knownLogin,
+          mutated: false,
+        })),
+        ...failed,
+        ...skipped,
+      ];
+      await syncTeamResults(syncAccessTracking, teams, {
+        status: "pending",
+        invitationId: existing?.id ?? null,
+        githubLogin: existing?.login || knownLogin,
+        error: "",
+      });
       return {
         provider: "GitHub",
         invitationCreated: false,
         mutated: false,
         githubLogin: existing?.login || knownLogin,
         invitationId: existing?.id ?? null,
-        results: [
-          ...teams.map((item) => ({
-            ...item,
-            status: "pending",
-            invitationId: existing?.id ?? null,
-            githubLogin: existing?.login || knownLogin,
-            mutated: false,
-          })),
-          ...failed,
-          ...skipped,
-        ],
+        results: markSynced(pendingResults),
       };
     }
 
     if (isAlreadyMemberError(error)) {
-      const existingMember = await findMemberByEmail(user.email, knownLogin);
+      const existingMember = await resolveExistingMember(user, knownLogin, teamSlugs);
       if (existingMember) {
         const membershipResults = await ensureTeamMemberships(existingMember.login, teams, dryRun);
+        await syncTeamResults(syncAccessTracking, membershipResults, {
+          status: "active",
+          githubLogin: existingMember.login,
+          error: "",
+        });
         return {
           provider: "GitHub",
           invitationCreated: false,
           mutated: membershipResults.some((item) => item.mutated),
           githubLogin: existingMember.login,
           invitationId: null,
-          results: [...membershipResults, ...failed, ...skipped],
+          results: markSynced([...membershipResults, ...failed, ...skipped]),
         };
       }
     }
 
     const message = formatGitHubError(error, user.email);
     logger.error("[ERROR]", message);
+    await syncTeamResults(syncAccessTracking, teams, {
+      status: "failed",
+      githubLogin: knownLogin,
+      error: message,
+    });
     return {
       provider: "GitHub",
       invitationCreated: false,
       mutated: false,
       githubLogin: knownLogin,
       invitationId: null,
-      results: [
+      results: markSynced([
         ...teams.map((item) => ({ ...item, status: "failed", error: message, mutated: false })),
         ...failed,
         ...skipped,
-      ],
+      ]),
     };
   }
 }
