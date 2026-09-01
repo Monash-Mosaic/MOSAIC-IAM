@@ -28,6 +28,12 @@ Inspect live Notion schemas without printing secrets:
 npm run discover:notion
 ```
 
+## Deployment
+
+Production runs as a **Cloudflare Worker**. Deploy only via the **Deploy Worker** GitHub Action (`workflow_dispatch`) — do not ship from a local machine.
+
+Point Slack production Request URLs at the Worker: `/slack/events`, `/slack/interactions`, `/slack/commands`.
+
 ## Slack onboarding bot
 
 Start the Socket Mode bot:
