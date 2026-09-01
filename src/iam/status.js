@@ -1,5 +1,5 @@
-const SUCCESS_STATUSES = new Set(["active", "granted"]);
-const IN_FLIGHT_STATUSES = new Set(["pending", "awaiting_user_action"]);
+const SUCCESS_STATUSES = new Set(["active", "granted", "awaiting_user_action"]);
+const IN_FLIGHT_STATUSES = new Set(["pending"]);
 const SOFT_STATUSES = new Set(["not_configured", "needs_configuration"]);
 
 export function deriveProvisioningStatus(results) {

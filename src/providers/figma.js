@@ -58,10 +58,10 @@ export async function getFigmaWorkspaceResource() {
   };
 }
 
-export async function reconcileFigmaAccess(user, resources, { trackingRecords = [], dryRun = false } = {}) {
+export async function reconcileFigmaAccess(user, resources, { dryRun = false } = {}) {
   const figmaResources = resources.filter(isFigmaResource);
   const results = figmaResources.map((resource) => {
-    const result = provisionInviteLinkResource(resource, trackingRecords);
+    const result = provisionInviteLinkResource(resource);
     if (dryRun) {
       logger.info(
         "[FIGMA]",

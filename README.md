@@ -6,7 +6,7 @@ IAM automation for MOSAIC. Notion is the source of truth. GitHub organisation ac
 
 1. Copy `.env.example` to `.env` and fill in Notion data source IDs, GitHub App credentials, `GITHUB_ORG`, and Slack tokens.
 2. Store the GitHub App private key in `secrets/` and point `GITHUB_PRIVATE_KEY_PATH` at it.
-3. Share the IAM Notion databases with the Notion integration.
+3. Share the IAM Notion databases with the Notion integration (**IAM - Users**, **IAM - RBAC Policies**, **IAM - Access Resources**).
 4. Set `GITHUB_ORG` to the real GitHub organisation slug (not a placeholder).
 5. For Slack, enable **Socket Mode** (no Request URL). Add `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, and `SLACK_SIGNING_SECRET` from the Slack app. The signing secret is on **Basic Information**; Socket Mode will not start without it.
 
@@ -51,9 +51,8 @@ How to test the Slack flow:
 3. The bot DMs a welcome message with **Start Onboarding**.
 4. Complete the modal (Full Name, Email, Mobile, Department, Role). Department/Role come from Notion. Email is the identity used for provisioning; GitHub username is not collected. Mobile is saved to the Users **Mobile** field.
 5. Confirm the **IAM - Users** record (Status `Active`, Slack User ID set).
-6. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**.
-7. Confirm GitHub / Slack / Google Drive results in **IAM - Access Tracking**. Notion and Figma start as **Pending** with join buttons in Slack; after the user taps join they become **Granted** / **Synced**.
-8. Type `/iam-update` in Slack to reopen your details, confirm them, and save changes. Team or role updates re-run access provisioning. If every access is already granted, the bot replies that details are updated and you have all necessary accesses.
+6. Slack DMs GitHub results from live GitHub APIs (invite already sent / you are already a member / invite sent). Notion and Figma always include join buttons — join with the link if you haven't already, otherwise ignore it.
+7. Type `/iam-update` in Slack to reopen your details, confirm them, and save changes. Team or role updates re-run access provisioning.
 
 ## Google Drive OAuth (optional)
 
@@ -79,22 +78,32 @@ Map those IDs into **IAM - Access Resources** (`Provider: GoogleDrive`, `Resourc
 
 ## Notion invite links
 
-Notion Plus has no SCIM in this engine. Workspace/teamspace membership is invite-link based:
+Notion Plus has no SCIM in this engine. Workspace and space membership is invite-link based:
 
-- First-time / not-yet-joined: **Actual State = Pending**, **Sync Status = Pending**, Slack shows a join button.
-- When the user taps the join button, IAM marks the row **Granted** / **Synced** and sends the invite URL.
-- Set `NOTION_WORKSPACE_INVITE_URL` or put the URL on the Access Resource (`NT-WK` / `NT-WORKSPACE`, teamspaces, etc.).
+- Slack always shows a join button when an Invite URL is configured.
+- Join with the link if you haven't already — otherwise ignore it. IAM does not record whether the link was opened.
+- Set `NOTION_WORKSPACE_INVITE_URL` or put the URL on the Access Resource (`NT-WK` / `NT-WORKSPACE`, spaces, etc.).
 
 ## Figma invite links
 
 Same pattern as Notion:
 
 - Add **IAM - Access Resources** row `FG-WK` (`Provider: Figma`, `Resource Type: Workspace`, `Invite URL`), or set `FIGMA_INVITE_URL`.
-- Pending until the user taps **Join MOSAIC Figma**; then tracking becomes **Granted** / **Synced**.
+- Slack shows **Join MOSAIC Figma**. Join with the link if you haven't already — otherwise ignore it.
+
+## GitHub provisioning
+
+For each desired GitHub team, IAM checks live GitHub state (not a Notion tracking table):
+
+1. If the email has an unexpired pending organisation invitation → **invite already sent**.
+2. If **Github Username** on the Members row is already a member of that team → **you are already a member**.
+3. Otherwise IAM sends an organisation invitation for that team.
+
+Re-running provision with the same email must not create duplicate unexpired invitations. Membership is checked by Github Username only — not by scanning team emails.
 
 ## Inspect access by Slack ID (dry-run)
 
-Resolve a member by Slack ID, list Access Tracking rows linked via the **Users** relation, and compare them to RBAC desired access. No writes.
+Resolve a member by Slack ID, compare RBAC desired access to live GitHub team invitations/membership and Notion/Figma invite links. No writes.
 
 ```bash
 npm run inspect:access -- --slack-id U0123456789
@@ -106,7 +115,7 @@ Also print what a reconcile dry-run would do:
 npm run inspect:access -- --slack-id U0123456789 --reconcile
 ```
 
-Identity path: Slack ID → **Members** (Slack ID field) → Access Tracking (**Users** relation). GitHub login is read from tracking `External Username` when present.
+Identity path: Slack ID → **IAM - Users** (Slack ID field). GitHub membership is checked with the Members **Github Username** field. Pending invitations are matched by email and ignored if expired (older than 7 days).
 
 ## Demo onboarding (no Slack)
 
@@ -131,11 +140,11 @@ npm run demo:onboarding -- \
   --dry-run
 ```
 
-Running the demo twice with the same email must not create duplicate IAM users, GitHub invitations, or Access Tracking rows.
+Running the demo twice with the same email must not create duplicate IAM users or GitHub invitations.
 
 ## Manual IAM Testing
 
-1. Add a member to **Members**.
+1. Add a member to **IAM - Users**.
 2. Set **Team** (e.g. `Engineering`), **Role** (e.g. `Developer`), **Status** to `Active`, and **IAM Status** to `Pending`.
 3. Confirm an enabled **IAM - RBAC Policies** row matches that Team + Role and relates to a GitHub Team in **IAM - Access Resources**.
 4. Dry-run first:
@@ -153,14 +162,14 @@ npm run provision
 ```
 
 6. Accept the GitHub organisation invitation.
-7. Run provision again. **IAM - Access Tracking** should move **Actual State** from `Pending` to `Granted` and **Sync Status** to `Synced` once org and team membership can be confirmed. Member **IAM Status** should become `Synced`.
-8. Run provision a third time. It should report that the user already matches desired state.
+7. Run provision again. GitHub should report **you are already a member** (or **invite already sent** until they accept). Member **IAM Status** should become `Synced` once every non-invite-link resource is granted.
+8. Run provision a third time. GitHub should still report **you are already a member** and must not send another invitation.
 
 GitHub email invitations require the invited address to be a **verified email** on the recipient's GitHub account.
 
 ## Legacy bootstrap / import
 
-Import existing Slack and GitHub access into Notion **before** IAM becomes authoritative. Bootstrap is always non-destructive: it writes Notion only and never invites, grants, removes, or revokes provider access. It does **not** call `reconcileUser()`.
+Import existing Slack users and GitHub usernames into **IAM - Users** before IAM becomes authoritative. Bootstrap is always non-destructive: it writes Notion Users only and never invites, grants, removes, or revokes provider access. It does **not** call `reconcileUser()`.
 
 Required Slack bot scopes for bootstrap: `users:read`, `users:read.email`.
 
@@ -184,7 +193,7 @@ Optional GitHub identity file (gitignored): `migration/github-users.json`
 
 Matching order for GitHub logins: public/profile email → IAM `GitHub Username` → migration file.
 
-Unresolved logins still get **Access Tracking** rows for each IAM-managed GitHub team membership. Those rows store the GitHub username, leave **Users** / **Email** empty, and use a title like `@login / GH-EN` so you can assign the IAM user manually afterward.
+Unresolved GitHub logins are logged so you can set **GitHub Username** on the Users row manually afterward.
 
 Dry-run first (discovery/matching only; no Notion writes):
 
@@ -200,4 +209,4 @@ npm run bootstrap:github
 npm run bootstrap:all
 ```
 
-Imported Access Tracking rows use `Source=Imported`, `Status=Active`/`Granted`, `Action=Existing Access` when those Notion fields exist. Unmapped GitHub members still create tracking rows for manual Users assignment. Users without Department/Role need manual classification before enforcement.
+Users without Department/Role need manual classification before enforcement.

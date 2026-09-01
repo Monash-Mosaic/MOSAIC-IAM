@@ -2,7 +2,7 @@ import { logger } from "../utils/logger.js";
 import { validateOnboardingInput, onboardingService } from "../iam/onboarding.js";
 import {
   decodeInviteActionValue,
-  markInviteLinkJoined,
+  resolveInviteLink,
 } from "../iam/inviteLinks.js";
 import { getUserSelectOptions } from "../notion/userOptions.js";
 import { findUserBySlackId } from "../notion/users.js";
@@ -222,7 +222,7 @@ export async function handleJoinInviteAction(client, body) {
     throw new Error("Join invite action is missing Slack user or invite details");
   }
 
-  const joined = await markInviteLinkJoined({
+  const joined = await resolveInviteLink({
     slackUserId,
     resourceCode: decoded.code,
     inviteUrl: decoded.inviteUrl,
@@ -237,13 +237,13 @@ export async function handleJoinInviteAction(client, body) {
 
   await client.chat.postMessage({
     channel: slackUserId,
-    text: `You're marked as joined for ${label}. Open the invite if it didn't open automatically: ${joined.inviteUrl}`,
+    text: `Here's your ${label} invite. Join with the link if you haven't already — otherwise you can ignore it: ${joined.inviteUrl}`,
     blocks: [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `Marked *${decoded.code}* as joined. Open your invite:`,
+          text: `Join *${label}* with the link if you haven't already — otherwise you can ignore it.`,
         },
       },
       {
@@ -262,7 +262,7 @@ export async function handleJoinInviteAction(client, body) {
 
   logger.info(
     "[SLACK]",
-    `Join invite ${decoded.code} tracked for Slack user ${slackUserId}`,
+    `Shared ${decoded.code} invite link with Slack user ${slackUserId}`,
   );
   return joined;
 }

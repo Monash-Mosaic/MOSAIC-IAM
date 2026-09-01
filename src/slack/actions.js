@@ -70,7 +70,7 @@ export function registerActions(app) {
       try {
         await client.chat.postMessage({
           channel: body.user?.id,
-          text: "Sorry — we couldn't record that join just then. Please try again, or message the MOSAIC team.",
+          text: "Sorry — we couldn't open that invite just then. Please try again, or message the MOSAIC team.",
         });
       } catch (dmError) {
         logger.error("[SLACK]", `Failed to send join invite failure DM: ${dmError.message}`);

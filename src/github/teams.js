@@ -67,7 +67,7 @@ export async function listTeamMembers({ teamSlug }) {
   });
 }
 
-export async function isTeamMember({ teamSlug, username }) {
+export async function getTeamMembership({ teamSlug, username }) {
   const env = getEnv();
   const octokit = await getGitHubClient();
   try {
@@ -76,13 +76,18 @@ export async function isTeamMember({ teamSlug, username }) {
       team_slug: teamSlug,
       username,
     });
-    return data.state === "active" || data.state === "pending";
+    return data;
   } catch (error) {
     if (error.status === 404) {
-      return false;
+      return null;
     }
     throw error;
   }
+}
+
+export async function isTeamMember({ teamSlug, username }) {
+  const membership = await getTeamMembership({ teamSlug, username });
+  return membership?.state === "active" || membership?.state === "pending";
 }
 
 export async function addTeamMember({ teamSlug, username }) {

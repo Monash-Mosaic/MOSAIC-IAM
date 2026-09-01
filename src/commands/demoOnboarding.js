@@ -52,7 +52,6 @@ async function warmup() {
     getDataSourceSchema("users"),
     getDataSourceSchema("policies"),
     getDataSourceSchema("resources"),
-    getDataSourceSchema("accessTracking"),
   ]);
 }
 

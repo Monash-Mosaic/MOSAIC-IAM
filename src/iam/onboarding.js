@@ -99,10 +99,14 @@ function classifyOutcome(reconcileResult) {
   if (reconcileResult.error || reconcileResult.provisioningStatus === "failed") {
     return "failed";
   }
+  const hasJoinLinks = (reconcileResult.results ?? []).some(
+    (result) => String(result.status).toLowerCase() === "awaiting_user_action",
+  );
   if (
     reconcileResult.provisioningStatus === "completed" &&
     !reconcileResult.changed &&
-    !reconcileResult.invitationCreated
+    !reconcileResult.invitationCreated &&
+    !hasJoinLinks
   ) {
     return "already_complete";
   }

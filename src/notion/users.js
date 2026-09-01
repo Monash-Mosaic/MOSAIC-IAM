@@ -66,6 +66,7 @@ export async function getAllUsers() {
   warnIfFieldMissing(schema, "status");
   warnIfFieldMissing(schema, "department");
   warnIfFieldMissing(schema, "role");
+  warnIfFieldMissing(schema, "githubUsername");
 
   const pages = await queryDataSource(env.NOTION_USERS_DATA_SOURCE_ID);
   return pages.map((page) => mapUser(page, schema)).filter((user) => user.email);

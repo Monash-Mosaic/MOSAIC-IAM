@@ -37,7 +37,7 @@ export const NOTION_FIELDS = {
     status: ["Status"],
     provisioningStatus: ["IAM Status", "Provisioning Status", "ProvisioningStatus"],
     slackUserId: ["Slack ID", "Slack User ID", "Slack User Id"],
-    githubUsername: ["GitHub Username", "GitHub Login", "GitHub Handle"],
+    githubUsername: ["Github Username", "GitHub Username", "GitHub Login", "GitHub Handle"],
     mobile: ["Mobile", "Mobile Number", "Phone", "Phone Number"],
     lastReconciled: ["Last IAM Sync", "Last Reconciled", "Last Reconciled At"],
     error: ["IAM Error", "Error"],
@@ -64,27 +64,6 @@ export const NOTION_FIELDS = {
     revokeEnabled: ["Revoke Enabled", "Revoke"],
     enabled: ["Enabled", "Active"],
     inviteUrl: ["Invite URL", "Invite Url", "Invitation URL", "Invite Link"],
-  },
-  accessTracking: {
-    name: ["Tracking ID", "Name"],
-    user: ["Users", "User"],
-    email: ["Email"],
-    policy: ["Policy", "RBAC Policy"],
-    resource: ["Resource", "Access Resource"],
-    provider: ["Provider"],
-    action: ["Action"],
-    source: ["Source"],
-    status: ["Actual State", "Status"],
-    desiredState: ["Desired State"],
-    syncStatus: ["Sync Status"],
-    externalInvitationId: ["External User ID", "External Invitation ID", "Invitation ID"],
-    externalResourceId: ["External Resource ID", "External Resource Id"],
-    githubLogin: ["External Username", "GitHub Username", "GitHub Login"],
-    requestedAt: ["Requested At"],
-    grantedAt: ["Granted At"],
-    lastSync: ["Last Sync"],
-    revokedAt: ["Revoked At"],
-    error: ["Error", "Error Message", "Notes"],
   },
 };
 
@@ -137,7 +116,6 @@ export async function getDataSourceSchema(kind) {
     users: env.NOTION_USERS_DATA_SOURCE_ID,
     policies: env.NOTION_POLICIES_DATA_SOURCE_ID,
     resources: env.NOTION_RESOURCES_DATA_SOURCE_ID,
-    accessTracking: env.NOTION_ACCESS_TRACKING_DATA_SOURCE_ID,
   };
   const dataSourceId = dataSourceIds[kind];
   const notion = getNotionClient();

@@ -1,9 +1,4 @@
 import { logger } from "../utils/logger.js";
-import {
-  findTrackingRecordForResource,
-  isGrantedTrackingStatus,
-  upsertAccessTracking,
-} from "../notion/accessTracking.js";
 import { getAllResources } from "../notion/resources.js";
 import { findUserBySlackId } from "../notion/users.js";
 
@@ -15,10 +10,10 @@ function normalize(value) {
 
 /**
  * Invite-link providers (Notion / Figma) are not API-verified.
- * - Already Granted in Access Tracking → stay granted (no join button)
- * - Otherwise → awaiting_user_action / Pending so Slack can show the join button
+ * Always surface the join button when an Invite URL exists. The user joins
+ * with the link if they haven't already, otherwise they can ignore it.
  */
-export function provisionInviteLinkResource(resource, trackingRecords = []) {
+export function provisionInviteLinkResource(resource) {
   if (!resource.provisionEnabled) {
     return {
       resource,
@@ -28,22 +23,8 @@ export function provisionInviteLinkResource(resource, trackingRecords = []) {
     };
   }
 
-  const existing = findTrackingRecordForResource(trackingRecords, resource);
-  if (existing && isGrantedTrackingStatus(existing.status)) {
-    return {
-      resource,
-      status: "granted",
-      error: "",
-      mutated: false,
-      inviteUrl: resource.inviteUrl || "",
-    };
-  }
-
   if (!resource.inviteUrl) {
-    logger.warn(
-      "[IAM]",
-      `${resource.code} has no Invite URL configured`,
-    );
+    logger.warn("[IAM]", `${resource.code} has no Invite URL configured`);
     return {
       resource,
       status: "needs_configuration",
@@ -85,10 +66,10 @@ export function decodeInviteActionValue(raw) {
 }
 
 /**
- * User clicked a Notion/Figma join button: mark Access Tracking as Granted/Synced
- * and return the invite URL so Slack can open/share it.
+ * User clicked a Notion/Figma join button: return the invite URL so Slack can
+ * open/share it. Membership is not tracked — join if you haven't, else ignore.
  */
-export async function markInviteLinkJoined({ slackUserId, resourceCode, inviteUrl }) {
+export async function resolveInviteLink({ slackUserId, resourceCode, inviteUrl }) {
   const slackId = String(slackUserId ?? "").trim();
   const code = String(resourceCode ?? "").trim();
   const url = String(inviteUrl ?? "").trim();
@@ -105,7 +86,7 @@ export async function markInviteLinkJoined({ slackUserId, resourceCode, inviteUr
   const resource =
     resources.find((item) => normalize(item.code) === normalize(code)) ?? null;
 
-  const trackingResource = resource
+  const inviteResource = resource
     ? { ...resource, inviteUrl: resource.inviteUrl || url }
     : {
         pageId: null,
@@ -121,27 +102,11 @@ export async function markInviteLinkJoined({ slackUserId, resourceCode, inviteUr
         inviteUrl: url,
       };
 
-  await upsertAccessTracking({
-    user,
-    policy: null,
-    resource: trackingResource,
-    status: "granted",
-    invitationId: null,
-    githubLogin: user.githubUsername || "",
-    error: "",
-    source: "Provisioned",
-    action: "Grant",
-    dryRun: false,
-  });
-
-  logger.info(
-    "[IAM]",
-    `Marked ${code} as granted for ${user.email} after join button click`,
-  );
+  logger.info("[IAM]", `Sharing ${code} invite link with ${user.email}`);
 
   return {
     user,
-    resource: trackingResource,
-    inviteUrl: trackingResource.inviteUrl || url,
+    resource: inviteResource,
+    inviteUrl: inviteResource.inviteUrl || url,
   };
 }

@@ -37,7 +37,6 @@ async function warmup() {
     getDataSourceSchema("users"),
     getDataSourceSchema("policies"),
     getDataSourceSchema("resources"),
-    getDataSourceSchema("accessTracking"),
   ]);
 }
 
@@ -48,9 +47,9 @@ async function main() {
   npm run inspect:access -- --slack-id U0123456789
   npm run inspect:access -- --slack-id U0123456789 --reconcile
 
-Looks up the IAM user by Slack ID, lists Access Tracking rows linked via the
-Users relation, compares them to RBAC desired access, and optionally runs a
-reconcile dry-run (no writes).`);
+Looks up the IAM user by Slack ID, compares RBAC desired access to live
+GitHub team invitations/membership and Notion/Figma invite links, and optionally
+runs a reconcile dry-run (no writes).`);
     if (!args.slackId && !args.help) {
       process.exitCode = 1;
     }

@@ -21,7 +21,7 @@ function parseArgs(argv) {
 
 async function warmup(target) {
   getEnv();
-  const schemas = [getDataSourceSchema("users"), getDataSourceSchema("accessTracking")];
+  const schemas = [getDataSourceSchema("users")];
   if (target === "github" || target === "all") {
     schemas.push(getDataSourceSchema("resources"));
     await getGitHubClient();

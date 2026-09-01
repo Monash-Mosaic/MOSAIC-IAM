@@ -1,13 +1,9 @@
 import { logger } from "../utils/logger.js";
-import {
-  findTrackingRecordForResource,
-  getTrackingRecordsForUser,
-  isGrantedTrackingStatus,
-} from "../notion/accessTracking.js";
-import { getAllResources } from "../notion/resources.js";
 import { findUserBySlackId } from "../notion/users.js";
+import { evaluateGitHubTeamAccess } from "../providers/github.js";
 import { FIGMA_WORKSPACE_CODE_ALIASES, getFigmaWorkspaceResource } from "../providers/figma.js";
 import { getNotionWorkspaceResource } from "../providers/notion.js";
+import { resolveTeam } from "../github/teams.js";
 import { reconcileUser } from "./reconciler.js";
 import { resolveDesiredAccess } from "./resolver.js";
 
@@ -29,19 +25,73 @@ function resourceLabel(resource) {
   return `${provider} · ${name}`.trim();
 }
 
-function trackingLabel(record, resourcesById) {
-  const linked = (record.resourceIds ?? [])
-    .map((id) => resourcesById.get(id))
-    .find(Boolean);
-  if (linked) {
-    return resourceLabel(linked);
+function providerKey(resource) {
+  return String(resource?.provider ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function isGitHubTeam(resource) {
+  return (
+    providerKey(resource) === "github" &&
+    String(resource?.resourceType ?? "").trim().toLowerCase() === "team"
+  );
+}
+
+function isInviteProvider(resource) {
+  const provider = providerKey(resource);
+  return provider === "notion" || provider === "figma";
+}
+
+async function liveStatusForResource(user, resource) {
+  if (isInviteProvider(resource)) {
+    return {
+      status: resource.inviteUrl ? "join_link" : "needs_configuration",
+      message: resource.inviteUrl
+        ? "join with the link if you haven't already"
+        : "invite URL is not configured",
+      githubLogin: "",
+    };
   }
-  return record.resourceCodeHint || record.name || "Unknown resource";
+
+  if (!isGitHubTeam(resource)) {
+    return {
+      status: "desired",
+      message: "checked during provision",
+      githubLogin: "",
+    };
+  }
+
+  const team = await resolveTeam({
+    externalResourceId: resource.externalResourceId,
+    externalName: resource.externalName,
+    code: resource.code,
+  });
+  if (!team) {
+    return {
+      status: "failed",
+      message: "GitHub team could not be resolved",
+      githubLogin: "",
+    };
+  }
+
+  const access = await evaluateGitHubTeamAccess({
+    user,
+    team,
+    knownLogin: user.githubUsername || null,
+  });
+  return {
+    status: access.status === "missing" ? "not_in_team" : access.status,
+    message: access.message || (access.status === "missing" ? "not a member" : access.status),
+    githubLogin: access.githubLogin || "",
+  };
 }
 
 /**
- * Resolve IAM user by Slack ID, then inventory Access Tracking via the Users
- * relation and compare against RBAC desired access. Always dry-run for reconcile.
+ * Resolve IAM user by Slack ID, then compare RBAC desired access against live
+ * provider state (GitHub team invitations/membership, Notion/Figma invite links).
+ * Always dry-run for reconcile.
  */
 export async function inspectAccessBySlackId(slackUserId, { reconcile = false } = {}) {
   const slackId = String(slackUserId ?? "").trim();
@@ -56,14 +106,11 @@ export async function inspectAccessBySlackId(slackUserId, { reconcile = false } 
 
   logger.info("[INSPECT]", `Resolved Slack ID ${slackId} → ${user.name} <${user.email}>`);
 
-  const [trackingRecords, desired, allResources, notionWorkspace, figmaWorkspace] =
-    await Promise.all([
-      getTrackingRecordsForUser(user),
-      resolveDesiredAccess(user),
-      getAllResources(),
-      getNotionWorkspaceResource(),
-      getFigmaWorkspaceResource(),
-    ]);
+  const [desired, notionWorkspace, figmaWorkspace] = await Promise.all([
+    resolveDesiredAccess(user),
+    getNotionWorkspaceResource(),
+    getFigmaWorkspaceResource(),
+  ]);
 
   const desiredResources = withDefaultResource(
     withDefaultResource(desired.resources, notionWorkspace),
@@ -73,36 +120,20 @@ export async function inspectAccessBySlackId(slackUserId, { reconcile = false } 
     },
   );
 
-  const resourcesById = new Map(allResources.map((resource) => [resource.pageId, resource]));
-
-  const currentAccess = trackingRecords.map((record) => ({
-    trackingId: record.name,
-    resourceCodes: record.resourceCodeHint || "",
-    resourceLabel: trackingLabel(record, resourcesById),
-    resourceIds: record.resourceIds ?? [],
-    status: record.status || "(empty)",
-    desiredState: record.desiredState || "",
-    syncStatus: record.syncStatus || "",
-    githubLogin: record.githubLogin || "",
-    granted: isGrantedTrackingStatus(record.status),
-    error: record.error || "",
-  }));
-
-  const desiredAccess = desiredResources.map((resource) => {
-    const tracking = findTrackingRecordForResource(trackingRecords, resource);
-    return {
+  const desiredAccess = [];
+  for (const resource of desiredResources) {
+    const live = await liveStatusForResource(user, resource);
+    desiredAccess.push({
       code: resource.code,
       label: resourceLabel(resource),
       provider: resource.provider,
       resourceType: resource.resourceType,
-      trackingStatus: tracking?.status || "(missing)",
-      trackingDesired: tracking?.desiredState || "",
-      trackingSync: tracking?.syncStatus || "",
-      githubLogin: tracking?.githubLogin || "",
-      granted: Boolean(tracking && isGrantedTrackingStatus(tracking.status)),
-      hasTrackingRow: Boolean(tracking),
-    };
-  });
+      status: live.status,
+      message: live.message,
+      githubLogin: live.githubLogin,
+      inviteUrl: resource.inviteUrl || "",
+    });
+  }
 
   let reconcileResult = null;
   if (reconcile) {
@@ -127,15 +158,12 @@ export async function inspectAccessBySlackId(slackUserId, { reconcile = false } 
       code: policy.code,
       name: policy.name,
     })),
-    currentAccess,
     desiredAccess,
     summary: {
-      trackingRows: currentAccess.length,
       desiredResources: desiredAccess.length,
-      desiredGranted: desiredAccess.filter((item) => item.granted).length,
-      desiredMissing: desiredAccess.filter((item) => !item.hasTrackingRow).length,
-      desiredNotGranted: desiredAccess.filter((item) => item.hasTrackingRow && !item.granted)
-        .length,
+      githubAlreadyInTeam: desiredAccess.filter((item) => item.status === "active").length,
+      githubInvitationSent: desiredAccess.filter((item) => item.status === "pending").length,
+      githubMissing: desiredAccess.filter((item) => item.status === "not_in_team").length,
     },
     reconcileResult,
   };
@@ -151,7 +179,7 @@ export function formatInspectAccessReport(report) {
   lines.push(`Team / Role: ${user.department} · ${user.role}`);
   lines.push(`User Status: ${user.status || "(empty)"}`);
   lines.push(`IAM Status: ${user.provisioningStatus || "(empty)"}`);
-  lines.push(`GitHub Username (Users table): ${user.githubUsername || "(empty)"}`);
+  lines.push(`Github Username (Members): ${user.githubUsername || "(empty)"}`);
   lines.push(`Notion Users page: ${user.pageId}`);
   lines.push("");
 
@@ -166,32 +194,11 @@ export function formatInspectAccessReport(report) {
   lines.push("");
 
   lines.push(
-    `Current Access Tracking (via Users relation): ${summary.trackingRows} row(s)`,
-  );
-  if (!report.currentAccess.length) {
-    lines.push("  (none linked to this user)");
-  } else {
-    for (const row of report.currentAccess) {
-      const github = row.githubLogin ? ` @${row.githubLogin}` : "";
-      lines.push(
-        `  • ${row.resourceLabel} — Actual=${row.status} Desired=${row.desiredState || "—"} Sync=${row.syncStatus || "—"}${github}`,
-      );
-      if (row.error) {
-        lines.push(`      error: ${row.error}`);
-      }
-    }
-  }
-  lines.push("");
-
-  lines.push(
-    `Desired access vs tracking: ${summary.desiredGranted}/${summary.desiredResources} granted, ${summary.desiredMissing} missing rows, ${summary.desiredNotGranted} not granted`,
+    `Desired access (live): ${summary.desiredResources} resource(s) — GitHub in team=${summary.githubAlreadyInTeam} invitation sent=${summary.githubInvitationSent} not in team=${summary.githubMissing}`,
   );
   for (const item of report.desiredAccess) {
-    const mark = item.granted ? "OK" : item.hasTrackingRow ? "NOT GRANTED" : "MISSING";
     const github = item.githubLogin ? ` @${item.githubLogin}` : "";
-    lines.push(
-      `  [${mark}] ${item.code} — ${item.label} | tracking=${item.trackingStatus}${github}`,
-    );
+    lines.push(`  [${item.status}] ${item.code} — ${item.label} | ${item.message}${github}`);
   }
 
   if (report.reconcileResult) {
@@ -202,8 +209,9 @@ export function formatInspectAccessReport(report) {
     for (const result of report.reconcileResult.results ?? []) {
       const code = result.resource?.code || "?";
       const label = resourceLabel(result.resource);
+      const message = result.message ? ` — ${result.message}` : "";
       const err = result.error ? ` (${result.error})` : "";
-      lines.push(`  • ${code} — ${label} → ${result.status}${err}`);
+      lines.push(`  • ${code} — ${label} → ${result.status}${message}${err}`);
     }
   }
 

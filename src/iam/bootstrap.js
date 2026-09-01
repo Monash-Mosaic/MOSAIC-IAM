@@ -4,7 +4,6 @@ import { bootstrapSlack } from "./bootstrapSlack.js";
 
 function printSummary({ slack, github, dryRun }) {
   const userMutations = slack ? slack.created + slack.updated : 0;
-  const trackingMutations = github ? github.trackingTotal : 0;
 
   logger.info("[SLACK]", slack ? `Found ${slack.found} active users` : "Skipped");
   if (slack) {
@@ -15,18 +14,9 @@ function printSummary({ slack, github, dryRun }) {
     logger.info("[GITHUB]", `Scanning ${github.teamsScanned} IAM-managed teams`);
     logger.info("[GITHUB]", `Mapped automatically: ${github.mappedAutomatically}`);
     logger.info("[GITHUB]", `Unresolved identities: ${github.unresolved}`);
-    if (github.unmappedTracking) {
-      logger.info(
-        "[GITHUB]",
-        `${github.unmappedTracking} tracking row(s) need a manual Users assignment`,
-      );
-    }
   }
   logger.info("[IMPORT]", `${dryRun ? "Would create/update" : "Created/updated"} ${userMutations} IAM users`);
-  logger.info(
-    "[IMPORT]",
-    `${dryRun ? "Would create/update" : "Created/updated"} ${trackingMutations} Access Tracking records`,
-  );
+  logger.info("[IMPORT]", "GitHub usernames are written to IAM Users when an email match exists.");
   logger.info("[IMPORT]", "No provider mutations performed.");
 }
 

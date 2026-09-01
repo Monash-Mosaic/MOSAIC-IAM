@@ -1,5 +1,3 @@
-import { encodeInviteActionValue } from "./inviteLinks.js";
-
 function slackCode(text) {
   const value = String(text ?? "").trim() || "—";
   return `\`${value.replace(/`/g, "'")}\``;
@@ -30,15 +28,19 @@ function providerLabel(resource) {
   return `${provider} · ${name}`.trim();
 }
 
-function statusLabel(status) {
-  switch (String(status).toLowerCase()) {
+function statusLabel(result) {
+  const custom = String(result?.message ?? "").trim();
+  if (custom) {
+    return custom;
+  }
+  switch (String(result?.status ?? "").toLowerCase()) {
     case "active":
     case "granted":
       return "you're in";
     case "pending":
       return "invite sent — check your email";
     case "awaiting_user_action":
-      return "join using the button below";
+      return "join using the button below if you haven't already";
     case "not_configured":
       return "coming soon";
     case "needs_configuration":
@@ -108,7 +110,7 @@ function inviteButtonLabel(action) {
   if (action.isWorkspace) {
     return "Join MOSAIC Notion Workspace";
   }
-  return `Join ${name} Notion Teamspace`;
+  return `Join ${name} Notion space`;
 }
 
 function inviteTextHint(action) {
@@ -121,7 +123,7 @@ function inviteTextHint(action) {
   if (action.isWorkspace) {
     return `• MOSAIC Notion Workspace — tap *${button}* below`;
   }
-  return `• ${action.name} Notion Teamspace — tap *${button}* below`;
+  return `• ${action.name} Notion space — tap *${button}* below`;
 }
 
 function truncateButtonText(text) {
@@ -140,7 +142,7 @@ function chunk(items, size) {
 export function buildAccessSummaryLines(reconcileResult) {
   return actionableResults(reconcileResult)
     .filter((result) => !isInviteLinkProvider(result.resource))
-    .map((result) => `• ${providerLabel(result.resource)} — ${statusLabel(result.status)}`);
+    .map((result) => `• ${providerLabel(result.resource)} — ${statusLabel(result)}`);
 }
 
 export function getInviteActions(reconcileResult) {
@@ -184,14 +186,17 @@ function buildInviteSectionLines(provider, actions) {
       text:
         provider === "figma"
           ? `${title}\nWe'll share your Figma invite shortly.`
-          : `${title}\nWe'll share your workspace and teamspace invites shortly.`,
+          : `${title}\nWe'll share your workspace and space invites shortly.`,
       buttons: [],
     };
   }
 
   const workspace = configured.find((action) => action.isWorkspace);
   const others = configured.filter((action) => !action.isWorkspace);
-  const lines = [title, "A couple of clicks and you're in:"];
+  const lines = [
+    title,
+    "Join with the link if you haven't already — otherwise you can ignore it.",
+  ];
   let step = 1;
   if (workspace) {
     lines.push(
@@ -203,7 +208,7 @@ function buildInviteSectionLines(provider, actions) {
   }
   for (const action of others) {
     lines.push(
-      `${step}. Join ${slackCode(action.name)}${provider === "notion" ? " Notion teamspace" : ""}`,
+      `${step}. Join ${slackCode(action.name)}${provider === "notion" ? " Notion space" : ""}`,
     );
     step += 1;
   }
@@ -215,16 +220,11 @@ function buildInviteSectionLines(provider, actions) {
     text: lines.join("\n"),
     buttons: configured.map((action) => ({
       type: "button",
-      action_id: "iam_join_invite",
       text: {
         type: "plain_text",
         text: truncateButtonText(inviteButtonLabel(action)),
       },
-      value: encodeInviteActionValue({
-        code: action.code,
-        inviteUrl: action.inviteUrl,
-        provider: action.provider,
-      }),
+      url: action.inviteUrl,
       style: "primary",
     })),
   };
@@ -239,7 +239,11 @@ function allAccessMessage(result) {
 
 export function buildOnboardingResultText(result) {
   const isUpdate = result.intent === "update";
-  if (result.outcome === "already_complete" || hasAllAccessGranted(result.reconcileResult)) {
+  const inviteActions = getInviteActions(result.reconcileResult);
+  if (
+    !inviteActions.length &&
+    (result.outcome === "already_complete" || hasAllAccessGranted(result.reconcileResult))
+  ) {
     return allAccessMessage(result);
   }
   if (result.outcome === "failed" && !result.saved) {
@@ -257,7 +261,6 @@ export function buildOnboardingResultText(result) {
   }
 
   const summaryLines = buildAccessSummaryLines(result.reconcileResult);
-  const inviteActions = getInviteActions(result.reconcileResult);
   const notionActions = inviteActions.filter((action) => action.provider === "notion");
   const figmaActions = inviteActions.filter((action) => action.provider === "figma");
 
@@ -311,7 +314,7 @@ export function buildOnboardingResultBlocks(result) {
   const allGranted =
     result.outcome === "already_complete" || hasAllAccessGranted(result.reconcileResult);
 
-  if (allGranted || (!summaryLines.length && !inviteActions.length)) {
+  if ((!inviteActions.length && allGranted) || (!summaryLines.length && !inviteActions.length)) {
     return [
       {
         type: "section",

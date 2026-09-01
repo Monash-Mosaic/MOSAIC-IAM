@@ -5,6 +5,9 @@ import { githubErrorText, isAlreadyInvitedError, isAlreadyMemberError } from "./
 
 export { githubErrorText, isAlreadyInvitedError, isAlreadyMemberError };
 
+/** GitHub organisation invitations expire 7 days after they are created. */
+const GITHUB_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function listPendingInvitations() {
   const env = getEnv();
   const octokit = await getGitHubClient();
@@ -14,22 +17,49 @@ export async function listPendingInvitations() {
   });
 }
 
+export function isInvitationExpired(invitation) {
+  if (!invitation) {
+    return true;
+  }
+  if (invitation.expired === true || invitation.invitation_expired === true) {
+    return true;
+  }
+  if (invitation.failed_at) {
+    return true;
+  }
+  const createdAt = invitation.created_at ? Date.parse(invitation.created_at) : NaN;
+  if (!Number.isFinite(createdAt)) {
+    return false;
+  }
+  return Date.now() - createdAt > GITHUB_INVITE_TTL_MS;
+}
+
 export async function findPendingInvitationByEmail(email) {
   const invitations = await listPendingInvitations();
-  const normalized = email.trim().toLowerCase();
+  const normalized = String(email ?? "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) {
+    return null;
+  }
   return (
     invitations.find((invitation) => invitation.email?.trim().toLowerCase() === normalized) ?? null
   );
 }
 
-export async function getInvitationTeams(invitationId) {
-  const env = getEnv();
-  const octokit = await getGitHubClient();
-  return octokit.paginate(octokit.rest.orgs.listInvitationTeams, {
-    org: env.GH_ORG,
-    invitation_id: invitationId,
-    per_page: 100,
-  });
+export async function findUnexpiredPendingInvitationByEmail(email) {
+  const invitation = await findPendingInvitationByEmail(email);
+  if (!invitation) {
+    return null;
+  }
+  if (isInvitationExpired(invitation)) {
+    logger.info(
+      "[GITHUB]",
+      `Pending invitation ${invitation.id} for ${email} is expired; treating as not sent`,
+    );
+    return null;
+  }
+  return invitation;
 }
 
 export async function createOrgInvitation({ email, teamIds }) {
@@ -47,16 +77,6 @@ export async function createOrgInvitation({ email, teamIds }) {
     team_ids: uniqueTeamIds,
   });
   return data;
-}
-
-export async function cancelOrgInvitation(invitationId) {
-  const env = getEnv();
-  const octokit = await getGitHubClient();
-  logger.warn("[GITHUB]", `Cancelling pending organisation invitation ${invitationId}`);
-  await octokit.rest.orgs.cancelInvitation({
-    org: env.GH_ORG,
-    invitation_id: invitationId,
-  });
 }
 
 export function formatGitHubError(error, email) {

@@ -35,7 +35,6 @@ async function discover() {
     ["users", env.NOTION_USERS_DATA_SOURCE_ID],
     ["policies", env.NOTION_POLICIES_DATA_SOURCE_ID],
     ["resources", env.NOTION_RESOURCES_DATA_SOURCE_ID],
-    ["accessTracking", env.NOTION_ACCESS_TRACKING_DATA_SOURCE_ID],
   ];
 
   for (const [label, dataSourceId] of sources) {

@@ -55,10 +55,10 @@ export async function getNotionWorkspaceResource() {
   };
 }
 
-export async function reconcileNotionAccess(user, resources, { trackingRecords = [], dryRun = false } = {}) {
+export async function reconcileNotionAccess(user, resources, { dryRun = false } = {}) {
   const notionResources = resources.filter(isNotionResource);
   const results = notionResources.map((resource) => {
-    const result = provisionInviteLinkResource(resource, trackingRecords);
+    const result = provisionInviteLinkResource(resource);
     if (dryRun) {
       logger.info(
         "[NOTION]",

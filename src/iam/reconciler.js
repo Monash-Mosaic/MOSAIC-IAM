@@ -1,10 +1,5 @@
 import { getEnforcementMode } from "../config/env.js";
 import { logger } from "../utils/logger.js";
-import {
-  findTrackingRecordForResource,
-  getTrackingRecordsForUser,
-  upsertAccessTracking,
-} from "../notion/accessTracking.js";
 import { updateUserGithubUsername, updateUserProvisioningStatus } from "../notion/users.js";
 import { getProvider } from "../providers/index.js";
 import { FIGMA_WORKSPACE_CODE_ALIASES, getFigmaWorkspaceResource } from "../providers/figma.js";
@@ -14,82 +9,14 @@ import { deriveProvisioningStatus } from "./status.js";
 
 function withDefaultResource(resources, extra) {
   const codes = new Set(
-    [extra.code, ...(extra.codeAliases ?? [])].map((code) => String(code ?? "").trim().toUpperCase()).filter(Boolean),
+    [extra.code, ...(extra.codeAliases ?? [])]
+      .map((code) => String(code ?? "").trim().toUpperCase())
+      .filter(Boolean),
   );
   if (resources.some((resource) => codes.has(resource.code.trim().toUpperCase()))) {
     return resources;
   }
   return [...resources, extra];
-}
-
-function findPolicyForResource(policies, resource) {
-  return (
-    policies.find((policy) => policy.resourceIds.includes(resource.pageId)) ??
-    policies[0] ??
-    null
-  );
-}
-
-function mergeTrackingRecord(trackingRecords, resource, patch) {
-  const existing = findTrackingRecordForResource(trackingRecords, resource);
-  if (existing) {
-    Object.assign(existing, patch);
-    return existing;
-  }
-  trackingRecords.push({
-    pageId: patch.pageId || "",
-    name: patch.name || "",
-    userIds: patch.userIds || [],
-    email: patch.email || "",
-    resourceIds: resource.pageId ? [resource.pageId] : [],
-    resourceCodeHint: resource.code || "",
-    ...patch,
-  });
-  return trackingRecords[trackingRecords.length - 1];
-}
-
-function createAccessTrackingSync({
-  user,
-  policies,
-  trackingRecords,
-  dryRun,
-  onGithubLogin,
-}) {
-  return async function syncAccessTracking(update) {
-    const { resource, status, invitationId, githubLogin, error } = update;
-    if (!resource) {
-      return;
-    }
-
-    const login = String(githubLogin ?? "").trim();
-    if (login) {
-      await onGithubLogin(login);
-    }
-
-    const record = await upsertAccessTracking({
-      user,
-      policy: findPolicyForResource(policies, resource),
-      resource,
-      status: status === "skipped" ? "failed" : status,
-      invitationId: invitationId ?? null,
-      githubLogin: login,
-      error: error || "",
-      source: "Provisioned",
-      action: "Grant",
-      dryRun,
-    });
-
-    mergeTrackingRecord(trackingRecords, resource, {
-      pageId: record?.pageId || "",
-      name: record?.name || "",
-      userIds: user?.pageId ? [user.pageId] : [],
-      email: user?.email || "",
-      status,
-      invitationId: invitationId ?? null,
-      githubLogin: login || record?.githubLogin || null,
-      error: error || "",
-    });
-  };
 }
 
 export async function reconcileUser(user, { dryRun = false } = {}) {
@@ -116,15 +43,10 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
       codeAliases: FIGMA_WORKSPACE_CODE_ALIASES,
     },
   );
-  const trackingRecords = await getTrackingRecordsForUser(user);
-  const now = new Date().toISOString();
-  logger.info(
-    "[IAM]",
-    `Access Tracking via Users relation: ${trackingRecords.length} row(s) for Slack ${user.slackUserId || "(none)"} / ${user.email}`,
-  );
 
   if (!policies.length) {
     const status = "failed";
+    const now = new Date().toISOString();
     await updateUserProvisioningStatus(user, {
       provisioningStatus: status,
       lastReconciled: now,
@@ -145,8 +67,9 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
   const allResults = [];
   let invitationCreated = false;
   let mutated = false;
-  let githubLogin = trackingRecords.find((record) => record.githubLogin)?.githubLogin ?? null;
+  let githubLogin = user.githubUsername || null;
   let githubUsernameUpdated = false;
+  const now = new Date().toISOString();
 
   async function persistGithubLogin(login) {
     const normalized = String(login ?? "").trim();
@@ -162,14 +85,6 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
     user.githubUsername = updated.githubUsername;
     githubUsernameUpdated = true;
   }
-
-  const syncAccessTracking = createAccessTrackingSync({
-    user,
-    policies,
-    trackingRecords,
-    dryRun,
-    onGithubLogin: persistGithubLogin,
-  });
 
   for (const [providerName, providerResources] of grouped.entries()) {
     const provider = getProvider(providerName);
@@ -188,12 +103,7 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
 
     let outcome;
     try {
-      outcome = await provider.reconcile(user, providerResources, {
-        trackingRecords,
-        dryRun,
-        policies,
-        syncAccessTracking,
-      });
+      outcome = await provider.reconcile(user, providerResources, { dryRun, policies });
     } catch (error) {
       const detail = error?.message || "Access could not be updated.";
       logger.error("[IAM]", `Provider ${providerName} failed for ${user.email}: ${detail}`);
@@ -217,24 +127,8 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
   }
 
   for (const result of allResults) {
-    const resource = result.resource;
-    if (!resource || result.trackingSynced) {
-      continue;
-    }
-    await upsertAccessTracking({
-      user,
-      policy: findPolicyForResource(policies, resource),
-      resource,
-      status: result.status === "skipped" ? "failed" : result.status,
-      invitationId: result.invitationId ?? null,
-      githubLogin: result.githubLogin || githubLogin,
-      error: result.error || "",
-      source: "Provisioned",
-      action: "Grant",
-      dryRun,
-    });
-    if (result.githubLogin || githubLogin) {
-      await persistGithubLogin(result.githubLogin || githubLogin);
+    if (result.githubLogin) {
+      await persistGithubLogin(result.githubLogin);
     }
     mutated = mutated || Boolean(result.mutated);
   }
@@ -243,9 +137,10 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
   await updateUserProvisioningStatus(user, {
     provisioningStatus,
     lastReconciled: now,
-    error: provisioningStatus === "failed" || provisioningStatus === "partially provisioned"
-      ? allResults.find((result) => result.error)?.error || ""
-      : "",
+    error:
+      provisioningStatus === "failed" || provisioningStatus === "partially provisioned"
+        ? allResults.find((result) => result.error)?.error || ""
+        : "",
     dryRun,
   });
 
@@ -260,5 +155,6 @@ export async function reconcileUser(user, { dryRun = false } = {}) {
     provisioningStatus,
     invitationCreated,
     results: allResults,
+    githubLogin,
   };
 }
